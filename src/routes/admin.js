@@ -24,7 +24,6 @@ router.post('/login', express.urlencoded({ extended: false }), (req, res) => {
   }
 
   if (password !== correctPassword) {
-    console.log('[Admin] Login failed — body keys:', Object.keys(req.body || {}), '| password length:', (password || '').length, '| expected length:', (correctPassword || '').length);
     return res.send(renderLogin('Incorrect password. Please try again.'));
   }
 
