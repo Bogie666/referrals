@@ -1,17 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../db');
-const { generateSlug, buildReferralLink } = require('../utils/slugs');
-const { sendReferralInvite, sendRewardNotification } = require('../services/chiirp');
-const { issueGiftCard } = require('../services/tango');
-
-const MIN_JOB_VALUE = parseFloat(process.env.MIN_JOB_VALUE || '150');
-const REFERRER_REWARD = parseFloat(process.env.REFERRER_REWARD || '75');
+const { generateSlug, buildReferralLink, generateReferralCode } = require('../utils/slugs');
+const { sendReferralInvite } = require('../services/chiirp');
 
 // ──────────────────────────────────────────────────────────────
 // POST /webhooks/servicetitan
 // ServiceTitan calls this endpoint when job events occur.
-// Configure in ST: Settings → Integrations → Webhooks
 // ──────────────────────────────────────────────────────────────
 router.post('/servicetitan', async (req, res) => {
   const payload = req.body;
@@ -30,12 +25,10 @@ router.post('/servicetitan', async (req, res) => {
 
   const eventType = (payload.eventType || payload.type || '').toLowerCase();
 
-  // ── Job Completed → Create/find customer, send referral invite ──
   if (eventType.includes('job') && eventType.includes('complet')) {
     await handleJobCompleted(payload);
   }
 
-  // ── Booking Created → Link referred customer to a referral record ──
   if (eventType.includes('booking') || eventType.includes('appointment')) {
     await handleNewBooking(payload);
   }
@@ -44,9 +37,9 @@ router.post('/servicetitan', async (req, res) => {
 // ──────────────────────────────────────────────────────────────
 // HANDLER: Job Completed
 // 1. Upsert customer record with referral link
-// 2. Send referral invite text via Chiirp
-// 3. Check if this customer was themselves a referred customer
-//    → if so, validate and reward the referrer
+// 2. Send referral invite text via Chiirp (first time only)
+// 3. Check if this customer was referred by someone
+//    → if so, validate, look up tier, mark completed
 // ──────────────────────────────────────────────────────────────
 async function handleJobCompleted(payload) {
   try {
@@ -62,6 +55,9 @@ async function handleJobCompleted(payload) {
       return;
     }
 
+    // Load min job value from settings
+    const minJobValue = await getSetting('min_job_value', '150');
+
     // ── Step 1: Upsert customer ──
     let customer = await getOrCreateCustomer({
       stCustomerId,
@@ -70,31 +66,34 @@ async function handleJobCompleted(payload) {
       email: customerEmail,
     });
 
-    // ── Step 2: Send referral invite (only on their first completed job) ──
-    if (customer.total_referrals === 0 && customerPhone) {
+    // ── Step 2: Send referral invite (only if not already sent) ──
+    if (!customer.invite_sent_at && customerPhone) {
       const textResult = await sendReferralInvite(customer);
       if (textResult.success) {
+        await supabase
+          .from('customers')
+          .update({ invite_sent_at: new Date().toISOString() })
+          .eq('id', customer.id);
         console.log(`[Referral] Invite sent to ${customerName} (${customerPhone})`);
       }
     }
 
     // ── Step 3: Check if this customer was referred by someone ──
-    // Look for a referral record where referred_st_id matches this customer
     const { data: referral } = await supabase
       .from('referrals')
-      .select('*, referrer:referrer_id(id, name, phone, email)')
+      .select('*, referrer:referrer_id(id, name, phone, email, total_referrals, total_rewards)')
       .eq('referred_st_id', stCustomerId)
       .eq('status', 'booked')
       .single();
 
     if (referral) {
       // Validate job value threshold
-      if (jobTotal < MIN_JOB_VALUE) {
+      if (jobTotal < parseFloat(minJobValue)) {
         await supabase
           .from('referrals')
           .update({
             status: 'rejected',
-            rejection_reason: `Job total $${jobTotal} is below minimum threshold of $${MIN_JOB_VALUE}`,
+            rejection_reason: `Job total $${jobTotal} is below minimum threshold of $${minJobValue}`,
             referred_job_id: jobId,
             referred_job_value: jobTotal,
           })
@@ -104,49 +103,33 @@ async function handleJobCompleted(payload) {
         return;
       }
 
-      // Mark as completed — ready for reward
+      // Find matching tier based on job value
+      const { data: tier } = await supabase
+        .from('referral_tiers')
+        .select('*')
+        .eq('active', true)
+        .lte('min_job_value', jobTotal)
+        .or(`max_job_value.gte.${jobTotal},max_job_value.is.null`)
+        .order('min_job_value', { ascending: false })
+        .limit(1)
+        .single();
+
+      const payoutAmount = tier ? parseFloat(tier.payout_amount) : 75;
+
+      // Mark as completed with tier info
       await supabase
         .from('referrals')
         .update({
           status: 'completed',
           referred_job_id: jobId,
           referred_job_value: jobTotal,
+          reward_amount: payoutAmount,
+          tier_id: tier?.id || null,
         })
         .eq('id', referral.id);
 
       const referrer = referral.referrer;
-      console.log(`[Referral] ✅ Qualified — ${referrer.name} referred ${referral.referred_name || 'a new customer'} | Job: $${jobTotal} | Awaiting reward`);
-
-      // ── Auto reward via Tango Card (opt-in) ──────────────────
-      // Set TANGO_AUTO_REWARD=true in your environment to enable.
-      // By default, referrals stay in 'completed' and are rewarded
-      // manually via the admin dashboard.
-      const autoReward = process.env.TANGO_AUTO_REWARD === 'true';
-
-      if (autoReward) {
-        if (!referrer.email) {
-          console.warn(`[Referral] Auto-reward skipped — ${referrer.name} has no email on file`);
-        } else {
-          const giftCard = await issueGiftCard({
-            recipientEmail: referrer.email,
-            recipientName: referrer.name,
-            amount: REFERRER_REWARD,
-            referralId: referral.id,
-          });
-
-          if (giftCard.success) {
-            await sendRewardNotification(referrer, referral.referred_name);
-            await supabase
-              .from('customers')
-              .update({
-                total_referrals: referrer.total_referrals + 1,
-                total_rewards: referrer.total_rewards + REFERRER_REWARD,
-              })
-              .eq('id', referrer.id);
-            console.log(`[Referral] 🎁 Auto-rewarded ${referrer.name} $${REFERRER_REWARD} via Tango Card`);
-          }
-        }
-      }
+      console.log(`[Referral] Qualified — ${referrer.name} referred ${referral.referred_name || 'a new customer'} | Job: $${jobTotal} | Tier: ${tier?.label || 'default'} ($${payoutAmount}) | Awaiting payout`);
     }
 
     // Mark job event as processed
@@ -162,31 +145,29 @@ async function handleJobCompleted(payload) {
 
 // ──────────────────────────────────────────────────────────────
 // HANDLER: New Booking
-// When a new booking comes in and was tagged with a referral slug,
-// link the new customer's ST ID to the referral record.
 // ──────────────────────────────────────────────────────────────
 async function handleNewBooking(payload) {
   try {
     const referralSlug = payload.referralSlug || payload.customFields?.referralSlug || null;
-    if (!referralSlug) return; // Not a referred booking
+    if (!referralSlug) return;
 
     const stCustomerId = String(payload.customerId || payload.customer?.id || '');
     const customerName = payload.customerName || payload.customer?.name || '';
     const customerPhone = normalizePhone(payload.customerPhone || payload.customer?.phone || '');
 
-    // Find the pending referral for this slug
+    // Find the referrer by slug or referral_code
     const { data: customer } = await supabase
       .from('customers')
       .select('id')
-      .eq('referral_slug', referralSlug)
+      .or(`referral_slug.eq.${referralSlug},referral_code.eq.${referralSlug}`)
       .single();
 
     if (!customer) {
-      console.warn(`[Booking] No customer found for slug: ${referralSlug}`);
+      console.warn(`[Booking] No customer found for slug/code: ${referralSlug}`);
       return;
     }
 
-    // Check if referral record already exists (clicked link = pending)
+    // Check if referral record already exists
     const { data: referral } = await supabase
       .from('referrals')
       .select('id')
@@ -195,7 +176,6 @@ async function handleNewBooking(payload) {
       .single();
 
     if (referral) {
-      // Update existing referral to booked status
       await supabase
         .from('referrals')
         .update({
@@ -205,7 +185,6 @@ async function handleNewBooking(payload) {
         })
         .eq('id', referral.id);
     } else {
-      // Create new referral record (they booked without clicking first)
       await supabase.from('referrals').insert({
         referrer_id: customer.id,
         referred_name: customerName,
@@ -226,7 +205,6 @@ async function handleNewBooking(payload) {
 // ──────────────────────────────────────────────────────────────
 
 async function getOrCreateCustomer({ stCustomerId, name, phone, email }) {
-  // Try to find existing customer
   const { data: existing } = await supabase
     .from('customers')
     .select('*')
@@ -235,9 +213,9 @@ async function getOrCreateCustomer({ stCustomerId, name, phone, email }) {
 
   if (existing) return existing;
 
-  // Create new customer with unique slug
   const slug = generateSlug(name);
   const referralLink = buildReferralLink(slug);
+  const referralCode = generateReferralCode();
 
   const { data: created, error } = await supabase
     .from('customers')
@@ -248,18 +226,28 @@ async function getOrCreateCustomer({ stCustomerId, name, phone, email }) {
       email,
       referral_slug: slug,
       referral_link: referralLink,
+      referral_code: referralCode,
     })
     .select()
     .single();
 
   if (error) throw new Error(`Failed to create customer: ${error.message}`);
-  console.log(`[Customer] Created: ${name} | Slug: ${slug}`);
+  console.log(`[Customer] Created: ${name} | Slug: ${slug} | Code: ${referralCode}`);
   return created;
+}
+
+async function getSetting(key, fallback) {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('value')
+    .eq('key', key)
+    .single();
+  return data?.value || fallback;
 }
 
 function normalizePhone(phone) {
   if (!phone) return '';
-  return phone.replace(/\D/g, '').replace(/^1/, ''); // strip country code
+  return phone.replace(/\D/g, '').replace(/^1/, '');
 }
 
 module.exports = router;

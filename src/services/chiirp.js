@@ -26,7 +26,6 @@ async function sendText({ to, message, customerId = null, referralId = null }) {
 
     const chiirpMsgId = response.data?.id || null;
 
-    // Log to DB
     await supabase.from('texts_log').insert({
       customer_id: customerId,
       referral_id: referralId,
@@ -46,38 +45,40 @@ async function sendText({ to, message, customerId = null, referralId = null }) {
 
 /**
  * Sends the referral invite text to a customer after their job completes.
- * This is the main message that kicks off the referral program.
+ * Includes both the full link and the short referral code.
  */
 async function sendReferralInvite(customer) {
-  const { name, phone, referral_link, id: customerId } = customer;
+  const { name, phone, referral_link, referral_code, id: customerId } = customer;
   const firstName = name.split(' ')[0];
   const discount = process.env.NEW_CUSTOMER_DISCOUNT || '50';
   const reward = process.env.REFERRER_REWARD || '75';
 
+  const codeLine = referral_code ? `\nYour code: ${referral_code}` : '';
+
   const message =
-    `Hey ${firstName}! Thanks for choosing LEX Air Conditioning. 🏠❄️\n\n` +
+    `Hey ${firstName}! Thanks for choosing LEX Air Conditioning.\n\n` +
     `Know someone who needs AC, heating, plumbing, or electrical work? ` +
     `Share your personal link and when they complete their first service, ` +
     `you get a $${reward} gift card and they save $${discount}!\n\n` +
-    `Your link: ${referral_link}\n\n` +
+    `Your link: ${referral_link}${codeLine}\n\n` +
     `Reply STOP to opt out.`;
 
-  return sendText({ to: phone, message, customerId });
+  return wrappedSendText({ to: phone, message, customerId });
 }
 
 /**
- * Sends a reward notification text to the referrer after their referral is rewarded.
+ * Sends a reward notification text to the referrer after a payout is recorded.
  */
-async function sendRewardNotification(customer, referredName) {
+async function sendRewardNotification(customer, referredName, amount, paymentMethod) {
   const firstName = customer.name.split(' ')[0];
-  const reward = process.env.REFERRER_REWARD || '75';
   const referredFirst = (referredName || 'your friend').split(' ')[0];
+  const methodLabel = paymentMethod === 'physical_card' ? 'gift card in the mail' : 'gift card via email';
 
   const message =
-    `Great news, ${firstName}! 🎉 ${referredFirst} just completed their first LEX service. ` +
-    `Your $${reward} gift card is on the way — check your email!`;
+    `Great news, ${firstName}! ${referredFirst} just completed their first LEX service. ` +
+    `Your $${amount} ${methodLabel} is on the way!`;
 
-  return sendText({ to: customer.phone, message, customerId: customer.id });
+  return wrappedSendText({ to: customer.phone, message, customerId: customer.id });
 }
 
 const { demoSendText } = require('./demoMode');
@@ -85,31 +86,6 @@ const wrappedSendText = demoSendText(sendText);
 
 module.exports = {
   sendText: wrappedSendText,
-  sendReferralInvite: async function (customer) {
-    const { name, phone, referral_link, id: customerId } = customer;
-    const firstName = name.split(' ')[0];
-    const discount = process.env.NEW_CUSTOMER_DISCOUNT || '50';
-    const reward = process.env.REFERRER_REWARD || '75';
-
-    const message =
-      `Hey ${firstName}! Thanks for choosing LEX Air Conditioning. 🏠❄️\n\n` +
-      `Know someone who needs AC, heating, plumbing, or electrical work? ` +
-      `Share your personal link and when they complete their first service, ` +
-      `you get a $${reward} gift card and they save $${discount}!\n\n` +
-      `Your link: ${referral_link}\n\n` +
-      `Reply STOP to opt out.`;
-
-    return wrappedSendText({ to: phone, message, customerId });
-  },
-  sendRewardNotification: async function (customer, referredName) {
-    const firstName = customer.name.split(' ')[0];
-    const reward = process.env.REFERRER_REWARD || '75';
-    const referredFirst = (referredName || 'your friend').split(' ')[0];
-
-    const message =
-      `Great news, ${firstName}! 🎉 ${referredFirst} just completed their first LEX service. ` +
-      `Your $${reward} gift card is on the way — check your email!`;
-
-    return wrappedSendText({ to: customer.phone, message, customerId: customer.id });
-  },
+  sendReferralInvite,
+  sendRewardNotification,
 };
