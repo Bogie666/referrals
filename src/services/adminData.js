@@ -4,7 +4,6 @@ const supabase = require('../db');
  * Top-level KPI stats for the dashboard header cards.
  */
 async function getStats() {
-  // Total referrals by status
   const { data: statusCounts } = await supabase
     .from('referrals')
     .select('status');
@@ -16,28 +15,44 @@ async function getStats() {
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
 
-  // Total rewards paid
-  const { data: rewardData } = await supabase
-    .from('referrals')
-    .select('reward_amount')
-    .eq('status', 'rewarded');
+  // Total rewards paid (from payouts table)
+  const { data: payoutData } = await supabase
+    .from('payouts')
+    .select('amount');
 
-  const totalRewardsPaid = (rewardData || []).reduce(
-    (sum, r) => sum + parseFloat(r.reward_amount || 0), 0
+  const totalRewardsPaid = (payoutData || []).reduce(
+    (sum, p) => sum + parseFloat(p.amount || 0), 0
   );
 
-  // Total customers enrolled
+  // Fallback: also check referrals marked rewarded (for legacy data)
+  if (totalRewardsPaid === 0) {
+    const { data: rewardData } = await supabase
+      .from('referrals')
+      .select('reward_amount')
+      .eq('status', 'rewarded');
+
+    const legacyTotal = (rewardData || []).reduce(
+      (sum, r) => sum + parseFloat(r.reward_amount || 0), 0
+    );
+    if (legacyTotal > 0) {
+      // Use legacy total if no payouts exist yet
+      return buildStats(counts, total, legacyTotal);
+    }
+  }
+
+  return buildStats(counts, total, totalRewardsPaid);
+}
+
+async function buildStats(counts, total, totalRewardsPaid) {
   const { count: totalCustomers } = await supabase
     .from('customers')
     .select('id', { count: 'exact', head: true });
 
-  // Conversion rate: rewarded / total (excluding pending)
   const qualified = counts.booked + counts.completed + counts.rewarded + counts.rejected;
   const conversionRate = qualified > 0
     ? Math.round((counts.rewarded / qualified) * 100)
     : 0;
 
-  // Texts sent this month
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -66,7 +81,7 @@ async function getReferrals({ status = null, limit = 50, offset = 0 } = {}) {
     .select(`
       id, referred_name, referred_phone, referred_email,
       referred_job_value, status, rejection_reason,
-      reward_amount, tango_order_id, tango_sent_at,
+      reward_amount, tier_id,
       created_at, updated_at,
       referrer:referrer_id (
         id, name, phone, email, referral_slug, total_referrals, total_rewards
@@ -77,8 +92,22 @@ async function getReferrals({ status = null, limit = 50, offset = 0 } = {}) {
 
   if (status) query = query.eq('status', status);
 
-  const { data, error, count } = await query;
+  const { data, error } = await query;
   return { referrals: data || [], error };
+}
+
+/**
+ * Get payout history for a referral.
+ */
+async function getPayoutForReferral(referralId) {
+  const { data } = await supabase
+    .from('payouts')
+    .select('*, admin:admin_user_id(name)')
+    .eq('referral_id', referralId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  return data;
 }
 
 /**
@@ -87,7 +116,7 @@ async function getReferrals({ status = null, limit = 50, offset = 0 } = {}) {
 async function getTopReferrers(limit = 10) {
   const { data } = await supabase
     .from('customers')
-    .select('id, name, phone, email, total_referrals, total_rewards, referral_link, created_at')
+    .select('id, name, phone, email, total_referrals, total_rewards, referral_link, referral_code, created_at')
     .gt('total_referrals', 0)
     .order('total_referrals', { ascending: false })
     .limit(limit);
@@ -96,7 +125,7 @@ async function getTopReferrers(limit = 10) {
 }
 
 /**
- * Recent activity feed — last N events across referrals and texts.
+ * Recent activity feed.
  */
 async function getRecentActivity(limit = 20) {
   const { data: referrals } = await supabase
@@ -149,4 +178,41 @@ async function getMonthlyTrend() {
   return months;
 }
 
-module.exports = { getStats, getReferrals, getTopReferrers, getRecentActivity, getMonthlyTrend };
+/**
+ * Get all tiers.
+ */
+async function getTiers() {
+  const { data } = await supabase
+    .from('referral_tiers')
+    .select('*')
+    .order('min_job_value', { ascending: true });
+  return data || [];
+}
+
+/**
+ * Get all system settings.
+ */
+async function getSettings() {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('*');
+  const settings = {};
+  (data || []).forEach(s => { settings[s.key] = s.value; });
+  return settings;
+}
+
+/**
+ * Get all admin users (exclude password hash).
+ */
+async function getAdminUsers() {
+  const { data } = await supabase
+    .from('admin_users')
+    .select('id, name, email, role, active, last_login_at, created_at')
+    .order('created_at', { ascending: true });
+  return data || [];
+}
+
+module.exports = {
+  getStats, getReferrals, getPayoutForReferral, getTopReferrers,
+  getRecentActivity, getMonthlyTrend, getTiers, getSettings, getAdminUsers,
+};

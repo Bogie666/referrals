@@ -9,7 +9,7 @@ function statusBadge(status) {
     pending:   { color: '#f59e0b', bg: '#fef3c7', label: 'Pending' },
     booked:    { color: '#3b82f6', bg: '#dbeafe', label: 'Booked' },
     completed: { color: '#8b5cf6', bg: '#ede9fe', label: 'Completed' },
-    rewarded:  { color: '#10b981', bg: '#d1fae5', label: '✓ Rewarded' },
+    rewarded:  { color: '#10b981', bg: '#d1fae5', label: 'Rewarded' },
     rejected:  { color: '#ef4444', bg: '#fee2e2', label: 'Rejected' },
   };
   const s = map[status] || { color: '#6b7280', bg: '#f3f4f6', label: status };
@@ -53,15 +53,16 @@ function renderLogin(error = '') {
     .logo h1 { font-size: 22px; color: #1d3a6e; font-weight: 700; }
     .logo p { font-size: 13px; color: #64748b; margin-top: 4px; }
     label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
-    input[type=password] {
+    input[type=email], input[type=password] {
       width: 100%; padding: 12px 16px; border: 1px solid #d1d5db;
       border-radius: 8px; font-size: 15px; outline: none; transition: border 0.2s;
+      margin-bottom: 16px;
     }
-    input[type=password]:focus { border-color: #1d3a6e; box-shadow: 0 0 0 3px rgba(29,58,110,0.1); }
+    input:focus { border-color: #1d3a6e; box-shadow: 0 0 0 3px rgba(29,58,110,0.1); }
     button {
       width: 100%; padding: 13px; background: #1d3a6e; color: #fff;
       border: none; border-radius: 8px; font-size: 15px; font-weight: 600;
-      cursor: pointer; margin-top: 24px; transition: background 0.2s;
+      cursor: pointer; margin-top: 8px; transition: background 0.2s;
     }
     button:hover { background: #162d57; }
     .error { background: #fee2e2; color: #dc2626; padding: 12px; border-radius: 8px;
@@ -77,8 +78,10 @@ function renderLogin(error = '') {
     </div>
     ${error ? `<div class="error">${error}</div>` : ''}
     <form method="POST" action="/admin/login">
-      <label for="password">Admin Password</label>
-      <input type="password" name="password" id="password" placeholder="Enter password" autofocus required />
+      <label for="email">Email</label>
+      <input type="email" name="email" id="email" placeholder="you@lexair.com" autofocus required />
+      <label for="password">Password</label>
+      <input type="password" name="password" id="password" placeholder="Enter password" required />
       <button type="submit">Sign In</button>
     </form>
   </div>
@@ -86,13 +89,14 @@ function renderLogin(error = '') {
 </html>`;
 }
 
-function renderDashboard({ stats, referrals, topReferrers, recentActivity, monthlyTrend, activeTab = 'overview' }) {
+function renderDashboard({ stats, referrals, topReferrers, recentActivity, monthlyTrend, tiers, settings, adminUsers, activeTab = 'overview' }) {
   const navItems = [
-    { id: 'overview',   label: '📊 Overview',       href: '/admin' },
-    { id: 'referrals',  label: '🔗 Referrals',       href: '/admin/referrals' },
-    { id: 'customers',  label: '⭐ Top Referrers',   href: '/admin/referrers' },
-    { id: 'activity',   label: '📋 Activity',        href: '/admin/activity' },
-    { id: 'portal',     label: '📱 Portal Preview',   href: '/admin/portal' },
+    { id: 'overview',   label: 'Overview',       href: '/admin' },
+    { id: 'referrals',  label: 'Referrals',      href: '/admin/referrals' },
+    { id: 'customers',  label: 'Top Referrers',  href: '/admin/referrers' },
+    { id: 'activity',   label: 'Activity',       href: '/admin/activity' },
+    { id: 'portal',     label: 'Portal Preview', href: '/admin/portal' },
+    { id: 'settings',   label: 'Settings',       href: '/admin/settings' },
   ];
 
   const trendLabels = JSON.stringify(monthlyTrend.map(m => m.label));
@@ -129,7 +133,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
       display: flex;
     }
 
-    /* ── Sidebar ── */
+    /* -- Sidebar -- */
     .sidebar {
       width: var(--sidebar-w);
       background: var(--navy);
@@ -187,7 +191,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     }
     .sidebar-footer a:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
-    /* ── Main content ── */
+    /* -- Main content -- */
     .main {
       margin-left: var(--sidebar-w);
       flex: 1;
@@ -208,7 +212,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
       margin-top: 4px;
     }
 
-    /* ── Stat cards ── */
+    /* -- Stat cards -- */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -244,7 +248,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     .stat-card.orange .stat-value { color: var(--orange); }
     .stat-card.navy .stat-value { color: var(--navy); }
 
-    /* ── Pipeline bar ── */
+    /* -- Pipeline bar -- */
     .pipeline-card {
       background: var(--card);
       border-radius: 12px;
@@ -296,7 +300,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
       border-radius: 50%;
     }
 
-    /* ── Two column layout ── */
+    /* -- Two column layout -- */
     .two-col {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -305,7 +309,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     }
     @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 
-    /* ── Card ── */
+    /* -- Card -- */
     .card {
       background: var(--card);
       border-radius: 12px;
@@ -324,7 +328,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     .card-header a:hover { text-decoration: underline; }
     .card-body { padding: 0; }
 
-    /* ── Table ── */
+    /* -- Table -- */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -351,7 +355,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     .td-name { font-weight: 500; color: var(--text); }
     .td-sub  { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-    /* ── Activity feed ── */
+    /* -- Activity feed -- */
     .activity-list { padding: 0 4px; }
     .activity-item {
       display: flex;
@@ -381,14 +385,14 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     .activity-text p { font-size: 13px; color: var(--text); line-height: 1.4; }
     .activity-text span { font-size: 12px; color: var(--muted); margin-top: 2px; display: block; }
 
-    /* ── Chart container ── */
+    /* -- Chart container -- */
     .chart-wrap {
       padding: 20px;
       height: 240px;
       position: relative;
     }
 
-    /* ── Filter bar ── */
+    /* -- Filter bar -- */
     .filter-bar {
       display: flex;
       gap: 8px;
@@ -413,7 +417,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
       border-color: var(--navy);
     }
 
-    /* ── Empty state ── */
+    /* -- Empty state -- */
     .empty-state {
       text-align: center;
       padding: 48px 24px;
@@ -421,16 +425,96 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     }
     .empty-state p { font-size: 14px; margin-top: 8px; }
 
-    /* ── Scrollable table wrapper ── */
+    /* -- Scrollable table wrapper -- */
     .table-wrap { overflow-x: auto; }
+
+    /* -- Modal overlay -- */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-box {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+    }
+    .modal-box h3 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+    .modal-box label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .modal-box select, .modal-box input, .modal-box textarea {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+      border-radius: 8px; font-size: 14px; margin-bottom: 16px; outline: none;
+      font-family: inherit;
+    }
+    .modal-box select:focus, .modal-box input:focus, .modal-box textarea:focus {
+      border-color: var(--navy); box-shadow: 0 0 0 3px rgba(29,58,110,0.1);
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+    .btn-primary {
+      padding: 10px 20px; background: var(--green); color: #fff;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary {
+      padding: 10px 20px; background: transparent; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 8px; font-size: 14px;
+      cursor: pointer;
+    }
+
+    /* -- Settings forms -- */
+    .settings-card {
+      background: var(--card);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .settings-card h3 {
+      font-size: 16px; font-weight: 700; margin-bottom: 16px;
+      padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+    .form-row { display: flex; gap: 16px; margin-bottom: 16px; align-items: flex-end; }
+    .form-row .form-group { flex: 1; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .form-group input, .form-group select {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+      border-radius: 8px; font-size: 14px; outline: none;
+    }
+    .form-group input:focus, .form-group select:focus {
+      border-color: var(--navy); box-shadow: 0 0 0 3px rgba(29,58,110,0.1);
+    }
+    .btn-save {
+      padding: 10px 24px; background: var(--navy); color: #fff;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-save:hover { background: #162d57; }
+    .btn-danger {
+      padding: 6px 12px; background: transparent; color: #ef4444;
+      border: 1px solid #ef4444; border-radius: 6px; font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-sm {
+      padding: 6px 14px; font-size: 12px; border-radius: 6px;
+      border: none; cursor: pointer; font-weight: 600;
+    }
   </style>
 </head>
 <body>
 
-<!-- ── Sidebar ── -->
+<!-- -- Sidebar -- -->
 <aside class="sidebar">
   <div class="sidebar-brand">
-    <h1>❄️ LEX Referral</h1>
+    <h1>LEX Referral</h1>
     <p>Admin Dashboard</p>
   </div>
   <nav class="sidebar-nav">
@@ -439,11 +523,11 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     `).join('')}
   </nav>
   <div class="sidebar-footer">
-    <a href="/admin/logout">🚪 Sign Out</a>
+    <a href="/admin/logout">Sign Out</a>
   </div>
 </aside>
 
-<!-- ── Main ── -->
+<!-- -- Main -- -->
 <main class="main">
 
   ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) : ''}
@@ -451,11 +535,34 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
   ${activeTab === 'customers' ? renderReferrersTab(topReferrers) : ''}
   ${activeTab === 'activity'  ? renderActivityTab(recentActivity) : ''}
   ${activeTab === 'portal'    ? renderPortalTab() : ''}
+  ${activeTab === 'settings'  ? renderSettingsTab(tiers || [], settings || {}, adminUsers || []) : ''}
 
 </main>
 
+<!-- Payout Modal -->
+<div class="modal-overlay" id="payout-modal">
+  <div class="modal-box">
+    <h3>Record Payout</h3>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:20px;" id="payout-modal-info"></p>
+    <input type="hidden" id="payout-referral-id" />
+    <label>Payment Method</label>
+    <select id="payout-method">
+      <option value="physical_card">Physical Gift Card (mailed)</option>
+      <option value="virtual_card">Virtual Gift Card (emailed)</option>
+    </select>
+    <label>Amount ($)</label>
+    <input type="number" id="payout-amount" step="0.01" min="1" />
+    <label>Reference Note (optional)</label>
+    <textarea id="payout-note" rows="2" placeholder="e.g. Visa card #1234, sent 3/31"></textarea>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closePayoutModal()">Cancel</button>
+      <button class="btn-primary" id="payout-submit-btn" onclick="submitPayout()">Record Payout</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ── Trend chart (overview only) ──
+// -- Trend chart (overview only) --
 const trendCtx = document.getElementById('trendChart');
 if (trendCtx) {
   new Chart(trendCtx, {
@@ -493,7 +600,7 @@ if (trendCtx) {
   });
 }
 
-// ── Status donut (overview only) ──
+// -- Status donut (overview only) --
 const donutCtx = document.getElementById('statusDonut');
 if (donutCtx) {
   const counts = ${JSON.stringify(stats.statusCounts)};
@@ -518,19 +625,81 @@ if (donutCtx) {
     }
   });
 }
+
+// -- Payout modal --
+function openPayoutModal(referralId, referrerName, amount) {
+  document.getElementById('payout-referral-id').value = referralId;
+  document.getElementById('payout-modal-info').textContent = 'Paying ' + referrerName + ' for this referral';
+  document.getElementById('payout-amount').value = amount || 75;
+  document.getElementById('payout-modal').classList.add('active');
+}
+
+function closePayoutModal() {
+  document.getElementById('payout-modal').classList.remove('active');
+}
+
+async function submitPayout() {
+  const id = document.getElementById('payout-referral-id').value;
+  const payment_method = document.getElementById('payout-method').value;
+  const amount = document.getElementById('payout-amount').value;
+  const reference_note = document.getElementById('payout-note').value;
+
+  const btn = document.getElementById('payout-submit-btn');
+  btn.textContent = 'Processing...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/admin/api/referral/' + id + '/payout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payment_method, amount, reference_note }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      closePayoutModal();
+      const row = document.getElementById('row-' + id);
+      if (row) {
+        const statusCell = row.querySelector('td:nth-child(4)');
+        const rewardCell = document.getElementById('reward-cell-' + id);
+        const actionCell = row.querySelector('td:last-child');
+        const methodLabel = payment_method === 'physical_card' ? 'Physical card' : 'Virtual card';
+
+        statusCell.innerHTML = '<span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;color:#10b981;background:#d1fae5;">Rewarded</span>';
+        rewardCell.innerHTML = '<span style="color:var(--green);font-weight:600;">$' + data.payoutAmount + '</span><div style="font-size:12px;color:var(--muted);margin-top:2px;">' + methodLabel + '</div>';
+        actionCell.innerHTML = '';
+        row.style.background = '#f0fdf4';
+        setTimeout(function() { row.style.background = ''; }, 2000);
+      }
+      // Remove banner if no more completed referrals
+      var remaining = document.querySelectorAll('button[onclick^="openPayoutModal"]').length;
+      if (remaining === 0) {
+        var banner = document.querySelector('[style*="fffbeb"]');
+        if (banner) banner.remove();
+      }
+    } else {
+      alert('Error: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Request failed: ' + err.message);
+  } finally {
+    btn.textContent = 'Record Payout';
+    btn.disabled = false;
+  }
+}
 </script>
 </body>
 </html>`;
 }
 
 function renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) {
-  const total = stats.total || 1; // avoid divide by zero in pipeline widths
+  const total = stats.total || 1;
   const stages = [
-    { key: 'pending',   count: stats.statusCounts.pending,   emoji: '⏳' },
-    { key: 'booked',    count: stats.statusCounts.booked,    emoji: '📅' },
-    { key: 'completed', count: stats.statusCounts.completed, emoji: '✅' },
-    { key: 'rewarded',  count: stats.statusCounts.rewarded,  emoji: '🎁' },
-    { key: 'rejected',  count: stats.statusCounts.rejected,  emoji: '✗' },
+    { key: 'pending',   count: stats.statusCounts.pending   },
+    { key: 'booked',    count: stats.statusCounts.booked    },
+    { key: 'completed', count: stats.statusCounts.completed },
+    { key: 'rewarded',  count: stats.statusCounts.rewarded  },
+    { key: 'rejected',  count: stats.statusCounts.rejected  },
   ];
 
   return `
@@ -546,16 +715,15 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
       display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
     ">
       <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-size:20px;">🎁</span>
+        <span style="font-size:20px;">&#127873;</span>
         <span style="font-weight:600;color:#92400e;">
-          ${stats.statusCounts.completed} referral${stats.statusCounts.completed > 1 ? 's' : ''} ready to reward —
-          <span style="font-weight:400;">send the gift card${stats.statusCounts.completed > 1 ? 's' : ''} and mark as rewarded.</span>
+          ${stats.statusCounts.completed} referral${stats.statusCounts.completed > 1 ? 's' : ''} ready to pay out
         </span>
       </div>
       <a href="/admin/referrals?status=completed" style="
         padding:7px 16px; background:#f59e0b; color:#fff;
         border-radius:8px; text-decoration:none; font-size:13px; font-weight:600; white-space:nowrap;
-      ">Review now →</a>
+      ">Review now</a>
     </div>
     ` : ''}
 
@@ -569,12 +737,12 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
       <div class="stat-card green">
         <div class="stat-label">Rewards Paid</div>
         <div class="stat-value">${formatCurrency(stats.totalRewardsPaid)}</div>
-        <div class="stat-sub">${stats.statusCounts.rewarded} gift cards sent</div>
+        <div class="stat-sub">${stats.statusCounts.rewarded} payouts</div>
       </div>
       <div class="stat-card orange">
         <div class="stat-label">Conversion Rate</div>
         <div class="stat-value">${stats.conversionRate}%</div>
-        <div class="stat-sub">Referred → Rewarded</div>
+        <div class="stat-sub">Referred to Rewarded</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Customers Enrolled</div>
@@ -595,7 +763,7 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
         ${stages.map(s => {
           const flex = s.count > 0 ? Math.max(s.count / total, 0.05) : 0.02;
           return `<div class="pipeline-stage ${s.key}" style="flex:${flex}" title="${s.key}: ${s.count}">
-            ${s.count > 0 ? `${s.emoji} ${s.count}` : ''}
+            ${s.count > 0 ? s.count : ''}
           </div>`;
         }).join('')}
       </div>
@@ -626,11 +794,10 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
     <!-- Bottom row: recent referrals + activity -->
     <div class="two-col">
 
-      <!-- Recent referrals -->
       <div class="card">
         <div class="card-header">
           <h3>Recent Referrals</h3>
-          <a href="/admin/referrals">View all →</a>
+          <a href="/admin/referrals">View all</a>
         </div>
         <div class="card-body table-wrap">
           <table>
@@ -643,12 +810,8 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
             <tbody>
               ${referrals.slice(0, 8).map(r => `
                 <tr>
-                  <td>
-                    <div class="td-name">${r.referrer?.name || '—'}</div>
-                  </td>
-                  <td>
-                    <div class="td-name">${r.referred_name || 'Pending'}</div>
-                  </td>
+                  <td><div class="td-name">${r.referrer?.name || '—'}</div></td>
+                  <td><div class="td-name">${r.referred_name || 'Pending'}</div></td>
                   <td>${statusBadge(r.status)}</td>
                   <td style="color:var(--muted); white-space:nowrap;">${formatDate(r.created_at)}</td>
                 </tr>
@@ -658,25 +821,23 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
         </div>
       </div>
 
-      <!-- Activity feed -->
       <div class="card">
         <div class="card-header">
           <h3>Live Activity</h3>
-          <a href="/admin/activity">View all →</a>
+          <a href="/admin/activity">View all</a>
         </div>
         <div class="activity-list">
           ${recentActivity.slice(0, 8).map(a => {
-            const icons = { rewarded:'🎁', booked:'📅', pending:'⏳', completed:'✅', rejected:'✗' };
             const msgs = {
-              rewarded:  `<strong>${a.referrerName}</strong> earned a ${formatCurrency(a.rewardAmount)} gift card`,
+              rewarded:  `<strong>${a.referrerName}</strong> earned a ${formatCurrency(a.rewardAmount)} reward`,
               booked:    `<strong>${a.referredName}</strong> booked their first service`,
-              pending:   `New referral link clicked — waiting for booking`,
-              completed: `<strong>${a.referredName}</strong>'s job completed — reward processing`,
+              pending:   `New referral link clicked`,
+              completed: `<strong>${a.referredName}</strong>'s job completed — awaiting payout`,
               rejected:  `Referral rejected`,
             };
             return `
               <div class="activity-item">
-                <div class="activity-dot ${a.status}">${icons[a.status] || '•'}</div>
+                <div class="activity-dot ${a.status}">&#8226;</div>
                 <div class="activity-text">
                   <p>${msgs[a.status] || a.status}</p>
                   <span>${formatDateTime(a.timestamp)}</span>
@@ -702,7 +863,6 @@ function renderReferralsTab(referrals) {
     </div>
 
     ${needsReward.length > 0 ? `
-    <!-- ── Needs reward alert banner ── -->
     <div style="
       background: #fffbeb;
       border: 1.5px solid #f59e0b;
@@ -716,13 +876,13 @@ function renderReferralsTab(referrals) {
       flex-wrap: wrap;
     ">
       <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:24px;">🎁</span>
+        <span style="font-size:24px;">&#127873;</span>
         <div>
           <div style="font-weight:700; color:#92400e; font-size:15px;">
-            ${needsReward.length} referral${needsReward.length > 1 ? 's' : ''} need${needsReward.length === 1 ? 's' : ''} a reward sent
+            ${needsReward.length} referral${needsReward.length > 1 ? 's' : ''} need${needsReward.length === 1 ? 's' : ''} a payout
           </div>
           <div style="font-size:13px; color:#b45309; margin-top:2px;">
-            These jobs are complete and qualify — send the gift cards, then mark them as rewarded below.
+            These jobs are complete and qualify — record payout details below.
           </div>
         </div>
       </div>
@@ -735,7 +895,7 @@ function renderReferralsTab(referrals) {
         font-size: 13px;
         font-weight: 600;
         white-space: nowrap;
-      ">View ${needsReward.length} pending →</a>
+      ">View ${needsReward.length} pending</a>
     </div>
     ` : ''}
 
@@ -751,9 +911,30 @@ function renderReferralsTab(referrals) {
       }).join('')}
     </div>
 
+    <div style="margin-bottom: 16px;">
+      <input
+        type="text"
+        id="referral-search"
+        placeholder="Search by name, phone, or email\u2026"
+        oninput="filterReferralRows()"
+        style="
+          width: 100%;
+          max-width: 400px;
+          padding: 10px 14px;
+          border: 1.5px solid #e2e8f0;
+          border-radius: 8px;
+          font-size: 14px;
+          outline: none;
+          transition: border-color 0.2s;
+        "
+        onfocus="this.style.borderColor='#3b82f6'"
+        onblur="this.style.borderColor='#e2e8f0'"
+      />
+    </div>
+
     <div class="card">
       <div class="card-body table-wrap">
-        <table>
+        <table id="referrals-table">
           <thead><tr>
             <th>Referrer</th>
             <th>Referred Person</th>
@@ -782,16 +963,17 @@ function renderReferralsTab(referrals) {
                 </td>
                 <td id="reward-cell-${r.id}">
                   ${r.status === 'rewarded'
-                    ? `<span style="color:var(--green);font-weight:600;">${formatCurrency(r.reward_amount)} sent</span>
-                       ${r.tango_order_id ? `<div class="td-sub">${r.tango_order_id}</div>` : ''}`
-                    : '—'
+                    ? `<span style="color:var(--green);font-weight:600;">${formatCurrency(r.reward_amount)} paid</span>`
+                    : r.status === 'completed'
+                      ? `<span style="color:var(--muted);">${formatCurrency(r.reward_amount)} (tier)</span>`
+                      : '—'
                   }
                 </td>
                 <td style="color:var(--muted);white-space:nowrap;">${formatDate(r.created_at)}</td>
                 <td style="white-space:nowrap;">
                   ${r.status === 'completed' ? `
                     <button
-                      onclick="markRewarded('${r.id}', '${(r.referrer?.name || '').replace(/'/g, "\\'")}')"
+                      onclick="openPayoutModal('${r.id}', '${(r.referrer?.name || '').replace(/'/g, "\\'")}', ${r.reward_amount || 75})"
                       style="
                         padding: 6px 14px;
                         background: var(--green);
@@ -803,7 +985,7 @@ function renderReferralsTab(referrals) {
                         cursor: pointer;
                         margin-right: 6px;
                       "
-                    >✓ Mark Rewarded</button>
+                    >Record Payout</button>
                     <button
                       onclick="markRejected('${r.id}')"
                       style="
@@ -832,51 +1014,13 @@ function renderReferralsTab(referrals) {
     </div>
 
     <script>
-    async function markRewarded(id, referrerName) {
-      const notes = prompt(
-        'Gift card sent to ' + referrerName + '\\n\\nOptional: add a note (e.g. "$75 Visa sent via email")\\nLeave blank and click OK to continue.',
-        ''
-      );
-      if (notes === null) return; // user cancelled
-
-      const btn = document.querySelector('#row-' + id + ' button');
-      if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
-
-      try {
-        const res = await fetch('/admin/api/referral/' + id + '/mark-rewarded', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notes }),
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          // Update row in place without a page reload
-          const row = document.getElementById('row-' + id);
-          const statusCell = row.querySelector('td:nth-child(4)');
-          const rewardCell = document.getElementById('reward-cell-' + id);
-          const actionCell = row.querySelector('td:last-child');
-
-          statusCell.innerHTML = '<span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;color:#10b981;background:#d1fae5;">✓ Rewarded</span>';
-          rewardCell.innerHTML = '<span style="color:var(--green);font-weight:600;">$' + (data.rewardAmount || 75) + ' sent</span>' + (notes ? '<div style="font-size:12px;color:var(--muted);margin-top:2px;">' + notes + '</div>' : '');
-          actionCell.innerHTML = '';
-          row.style.background = '#f0fdf4';
-          setTimeout(() => { row.style.background = ''; }, 2000);
-
-          // Update the banner count
-          const bannerCount = document.querySelectorAll('button[onclick^="markRewarded"]').length;
-          if (bannerCount === 0) {
-            const banner = document.querySelector('[style*="fffbeb"]');
-            if (banner) banner.remove();
-          }
-        } else {
-          alert('Error: ' + (data.error || 'Unknown error'));
-          if (btn) { btn.textContent = '✓ Mark Rewarded'; btn.disabled = false; }
-        }
-      } catch (err) {
-        alert('Request failed: ' + err.message);
-        if (btn) { btn.textContent = '✓ Mark Rewarded'; btn.disabled = false; }
-      }
+    function filterReferralRows() {
+      var q = document.getElementById('referral-search').value.toLowerCase();
+      var rows = document.getElementById('referrals-table').querySelectorAll('tbody tr');
+      rows.forEach(function(row) {
+        var text = row.textContent.toLowerCase();
+        row.style.display = text.indexOf(q) !== -1 ? '' : 'none';
+      });
     }
 
     async function markRejected(id) {
@@ -897,7 +1041,7 @@ function renderReferralsTab(referrals) {
         statusCell.innerHTML = '<span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;color:#ef4444;background:#fee2e2;">Rejected</span><div style="font-size:12px;color:#ef4444;margin-top:3px;">' + reason + '</div>';
         actionCell.innerHTML = '';
         row.style.background = '#fff1f2';
-        setTimeout(() => { row.style.background = ''; }, 2000);
+        setTimeout(function() { row.style.background = ''; }, 2000);
       } else {
         alert('Error: ' + (data.error || 'Unknown error'));
       }
@@ -921,6 +1065,7 @@ function renderReferrersTab(topReferrers) {
             <th>Referrals</th>
             <th>Total Earned</th>
             <th>Referral Link</th>
+            <th>Code</th>
             <th>Member Since</th>
           </tr></thead>
           <tbody>
@@ -938,12 +1083,15 @@ function renderReferrersTab(topReferrers) {
                     ${c.referral_link}
                   </code>
                 </td>
+                <td>
+                  ${c.referral_code ? `<code style="font-size:12px;background:#f1f5f9;padding:3px 8px;border-radius:4px;font-weight:600;">${c.referral_code}</code>` : '—'}
+                </td>
                 <td style="color:var(--muted);">${formatDate(c.created_at)}</td>
               </tr>
             `).join('') || `
-              <tr><td colspan="6">
+              <tr><td colspan="7">
                 <div class="empty-state">
-                  <p>No referrers yet — they'll appear here once jobs complete</p>
+                  <p>No referrers yet</p>
                 </div>
               </td></tr>
             `}
@@ -955,7 +1103,6 @@ function renderReferrersTab(topReferrers) {
 }
 
 function renderActivityTab(recentActivity) {
-  const icons = { rewarded:'🎁', booked:'📅', pending:'⏳', completed:'✅', rejected:'✗' };
   return `
     <div class="page-header">
       <h2>Activity Feed</h2>
@@ -965,14 +1112,14 @@ function renderActivityTab(recentActivity) {
       <div class="activity-list">
         ${recentActivity.map(a => `
           <div class="activity-item">
-            <div class="activity-dot ${a.status}">${icons[a.status] || '•'}</div>
+            <div class="activity-dot ${a.status}">&#8226;</div>
             <div class="activity-text">
               <p>
                 <strong>${a.referrerName}</strong>
-                ${a.status === 'rewarded' ? ` earned a gift card for referring ${a.referredName}` : ''}
+                ${a.status === 'rewarded' ? ` earned ${formatCurrency(a.rewardAmount)} for referring ${a.referredName}` : ''}
                 ${a.status === 'booked'   ? ` — ${a.referredName} booked their first service` : ''}
                 ${a.status === 'pending'  ? ` — referral link clicked, awaiting booking` : ''}
-                ${a.status === 'completed'? ` — ${a.referredName}'s job completed, processing reward` : ''}
+                ${a.status === 'completed'? ` — ${a.referredName}'s job completed, awaiting payout` : ''}
                 ${a.status === 'rejected' ? ` — referral rejected` : ''}
               </p>
               <span>${formatDateTime(a.timestamp)}</span>
@@ -985,21 +1132,358 @@ function renderActivityTab(recentActivity) {
   `;
 }
 
+function renderSettingsTab(tiers, settings, adminUsers) {
+  return `
+    <div class="page-header">
+      <h2>Settings</h2>
+      <p>Configure referral program parameters</p>
+    </div>
+
+    <!-- General Settings -->
+    <div class="settings-card">
+      <h3>General</h3>
+      <form onsubmit="saveSettings(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Min Job Value ($)</label>
+            <input type="number" id="setting-min-job-value" value="${settings.min_job_value || '150'}" step="1" min="0" />
+          </div>
+          <div class="form-group">
+            <label>New Customer Discount ($)</label>
+            <input type="number" id="setting-new-customer-discount" value="${settings.new_customer_discount || '50'}" step="1" min="0" />
+          </div>
+        </div>
+        <button type="submit" class="btn-save" id="settings-save-btn">Save Settings</button>
+      </form>
+    </div>
+
+    <!-- Reward Tiers -->
+    <div class="settings-card">
+      <h3>Reward Tiers</h3>
+      <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+        Reward amount is based on the referred job's value. When a referral completes, the system picks the tier matching the job total.
+      </p>
+      <table style="margin-bottom:20px;">
+        <thead><tr>
+          <th>Tier</th>
+          <th>Min Job Value</th>
+          <th>Max Job Value</th>
+          <th>Reward</th>
+          <th>Active</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${tiers.map(t => `
+            <tr id="tier-${t.id}">
+              <td><strong>${t.label}</strong></td>
+              <td>${formatCurrency(t.min_job_value)}</td>
+              <td>${t.max_job_value !== null ? formatCurrency(t.max_job_value) : 'Unlimited'}</td>
+              <td style="font-weight:600;color:var(--green);">${formatCurrency(t.payout_amount)}</td>
+              <td>
+                <span style="color:${t.active ? 'var(--green)' : '#ef4444'};font-weight:600;">
+                  ${t.active ? 'Yes' : 'No'}
+                </span>
+              </td>
+              <td>
+                <button class="btn-sm" style="background:var(--navy);color:#fff;margin-right:4px;"
+                  onclick="editTier('${t.id}', '${t.label}', ${t.min_job_value}, ${t.max_job_value === null ? 'null' : t.max_job_value}, ${t.payout_amount}, ${t.active})">
+                  Edit
+                </button>
+                <button class="btn-danger" onclick="toggleTier('${t.id}', ${!t.active})">
+                  ${t.active ? 'Disable' : 'Enable'}
+                </button>
+              </td>
+            </tr>
+          `).join('') || '<tr><td colspan="6"><div class="empty-state"><p>No tiers configured</p></div></td></tr>'}
+        </tbody>
+      </table>
+
+      <!-- Add tier form -->
+      <div style="border-top:1px solid var(--border); padding-top:16px;">
+        <h4 style="font-size:14px; margin-bottom:12px;">Add New Tier</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Label</label>
+            <input type="text" id="new-tier-label" placeholder="e.g. Diamond" />
+          </div>
+          <div class="form-group">
+            <label>Min Job Value ($)</label>
+            <input type="number" id="new-tier-min" min="0" step="0.01" placeholder="75" />
+          </div>
+          <div class="form-group">
+            <label>Max Job Value ($)</label>
+            <input type="number" id="new-tier-max" step="0.01" placeholder="Leave blank for unlimited" />
+          </div>
+          <div class="form-group">
+            <label>Payout ($)</label>
+            <input type="number" id="new-tier-payout" step="0.01" min="1" placeholder="75" />
+          </div>
+        </div>
+        <button class="btn-save" onclick="addTier()">Add Tier</button>
+      </div>
+    </div>
+
+    <!-- User Management -->
+    <div class="settings-card">
+      <div
+        onclick="var body=document.getElementById('users-section-body'); var arrow=document.getElementById('users-arrow'); if(body.style.display==='none'){body.style.display='';arrow.textContent='▾';}else{body.style.display='none';arrow.textContent='▸';}"
+        style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none;"
+      >
+        <h3 style="margin:0;">User Management</h3>
+        <span id="users-arrow" style="font-size:18px; color:var(--muted);">▸</span>
+      </div>
+      <div id="users-section-body" style="display:none; margin-top:16px;">
+        <table style="margin-bottom:20px;">
+          <thead><tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Last Login</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            ${adminUsers.map(u => `
+              <tr id="user-${u.id}">
+                <td><strong>${u.name}</strong></td>
+                <td>${u.email}</td>
+                <td>
+                  <span style="
+                    display:inline-block; padding:3px 10px; border-radius:20px;
+                    font-size:12px; font-weight:600;
+                    color:${u.role === 'super_admin' ? '#8b5cf6' : u.role === 'admin' ? '#3b82f6' : '#6b7280'};
+                    background:${u.role === 'super_admin' ? '#ede9fe' : u.role === 'admin' ? '#dbeafe' : '#f3f4f6'};
+                  ">${u.role === 'super_admin' ? 'Super Admin' : u.role === 'admin' ? 'Admin' : 'User'}</span>
+                </td>
+                <td>
+                  <span style="color:${u.active ? 'var(--green)' : '#ef4444'};font-weight:600;">
+                    ${u.active ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td style="color:var(--muted);white-space:nowrap;">${u.last_login_at ? formatDate(u.last_login_at) : 'Never'}</td>
+                <td style="white-space:nowrap;">
+                  ${u.role !== 'super_admin' ? `
+                    <button class="btn-sm" style="background:var(--navy);color:#fff;margin-right:4px;"
+                      onclick="editUser('${u.id}', '${u.name.replace(/'/g, "\\'")}', '${u.email}', '${u.role}')">
+                      Edit
+                    </button>
+                    <button class="btn-danger"
+                      onclick="toggleUser('${u.id}', ${!u.active})">
+                      ${u.active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  ` : ''}
+                </td>
+              </tr>
+            `).join('') || '<tr><td colspan="6"><div class="empty-state"><p>No users found</p></div></td></tr>'}
+          </tbody>
+        </table>
+
+        <div style="border-top:1px solid var(--border); padding-top:16px;">
+          <h4 style="font-size:14px; margin-bottom:12px;">Add New User</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Name</label>
+              <input type="text" id="new-user-name" placeholder="Full name" />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="new-user-email" placeholder="email@example.com" />
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input type="password" id="new-user-password" placeholder="Min 6 characters" />
+            </div>
+            <div class="form-group">
+              <label>Role</label>
+              <select id="new-user-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn-save" onclick="addUser()">Add User</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    async function saveSettings(e) {
+      e.preventDefault();
+      const btn = document.getElementById('settings-save-btn');
+      btn.textContent = 'Saving...';
+      btn.disabled = true;
+
+      const settings = {
+        min_job_value: document.getElementById('setting-min-job-value').value,
+        new_customer_discount: document.getElementById('setting-new-customer-discount').value,
+      };
+
+      try {
+        const res = await fetch('/admin/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          btn.textContent = 'Saved!';
+          btn.style.background = 'var(--green)';
+          setTimeout(function() { btn.textContent = 'Save Settings'; btn.style.background = ''; btn.disabled = false; }, 2000);
+        } else {
+          alert('Error: ' + (data.error || 'Unknown'));
+          btn.textContent = 'Save Settings'; btn.disabled = false;
+        }
+      } catch (err) {
+        alert('Request failed: ' + err.message);
+        btn.textContent = 'Save Settings'; btn.disabled = false;
+      }
+    }
+
+    async function addTier() {
+      const label = document.getElementById('new-tier-label').value.trim();
+      const min_job_value = document.getElementById('new-tier-min').value;
+      const max_job_value = document.getElementById('new-tier-max').value || null;
+      const payout_amount = document.getElementById('new-tier-payout').value;
+
+      if (!label || !min_job_value || !payout_amount) {
+        alert('Please fill in label, min job value, and reward amount.');
+        return;
+      }
+
+      const res = await fetch('/admin/api/tiers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, min_job_value, max_job_value, payout_amount }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        location.reload();
+      } else {
+        alert('Error: ' + (data.error || 'Unknown'));
+      }
+    }
+
+    function editTier(id, label, min, max, payout, active) {
+      var newLabel = prompt('Tier label:', label);
+      if (newLabel === null) return;
+      var newMin = prompt('Min job value ($):', min);
+      if (newMin === null) return;
+      var newMax = prompt('Max job value ($ — blank = unlimited):', max === null ? '' : max);
+      if (newMax === null) return;
+      var newPayout = prompt('Reward amount ($):', payout);
+      if (newPayout === null) return;
+
+      fetch('/admin/api/tiers/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: newLabel,
+          min_job_value: parseFloat(newMin),
+          max_job_value: newMax ? parseFloat(newMax) : null,
+          payout_amount: parseFloat(newPayout),
+          active: active,
+        }),
+      }).then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.success) location.reload();
+          else alert('Error: ' + (data.error || 'Unknown'));
+        });
+    }
+
+    async function toggleTier(id, newActive) {
+      const res = await fetch('/admin/api/tiers/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: newActive }),
+      });
+      const data = await res.json();
+      if (data.success) location.reload();
+      else alert('Error: ' + (data.error || 'Unknown'));
+    }
+
+    async function addUser() {
+      var name = document.getElementById('new-user-name').value.trim();
+      var email = document.getElementById('new-user-email').value.trim();
+      var password = document.getElementById('new-user-password').value;
+      var role = document.getElementById('new-user-role').value;
+
+      if (!name || !email || !password) {
+        alert('Please fill in name, email, and password.');
+        return;
+      }
+      if (password.length < 6) {
+        alert('Password must be at least 6 characters.');
+        return;
+      }
+
+      var res = await fetch('/admin/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, email: email, password: password, role: role }),
+      });
+      var data = await res.json();
+      if (data.success) location.reload();
+      else alert('Error: ' + (data.error || 'Unknown'));
+    }
+
+    function editUser(id, name, email, role) {
+      var newName = prompt('Name:', name);
+      if (newName === null) return;
+      var newEmail = prompt('Email:', email);
+      if (newEmail === null) return;
+      var newRole = prompt('Role (admin or user):', role);
+      if (newRole === null) return;
+      if (newRole !== 'admin' && newRole !== 'user') {
+        alert('Role must be "admin" or "user".');
+        return;
+      }
+      var newPassword = prompt('New password (leave blank to keep current):');
+      if (newPassword === null) return;
+
+      var body = { name: newName, email: newEmail, role: newRole };
+      if (newPassword) body.password = newPassword;
+
+      fetch('/admin/api/users/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.success) location.reload();
+          else alert('Error: ' + (data.error || 'Unknown'));
+        });
+    }
+
+    async function toggleUser(id, newActive) {
+      var res = await fetch('/admin/api/users/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: newActive }),
+      });
+      var data = await res.json();
+      if (data.success) location.reload();
+      else alert('Error: ' + (data.error || 'Unknown'));
+    }
+    </script>
+  `;
+}
+
 // ──────────────────────────────────────────────────────────────
 // Portal Preview Tab
 // ──────────────────────────────────────────────────────────────
 function renderPortalTab() {
   const demoPhones = [
-    { label: 'Sarah Mitchell',  phone: '9724561001', sub: '3 referrals · Top Referrer' },
+    { label: 'Sarah Mitchell',  phone: '9724561001', sub: '3 referrals' },
     { label: 'James Thornton',  phone: '9724561002', sub: '2 referrals' },
     { label: 'Maria Gonzalez',  phone: '9724561003', sub: '2 referrals' },
     { label: 'Robert Chen',     phone: '9724561004', sub: '1 referral' },
     { label: 'Marcus Johnson',  phone: '9724561008', sub: '1 referral' },
   ];
   const stDemoPhones = [
-    { label: 'Jennifer Walsh',  phone: '9725550101', sub: 'ST self-signup · has jobs' },
-    { label: 'Mike Castillo',   phone: '9725550102', sub: 'ST self-signup · has jobs' },
-    { label: 'Tyler Brooks',    phone: '9725550201', sub: 'ST · no completed jobs yet' },
+    { label: 'Jennifer Walsh',  phone: '9725550101', sub: 'ST self-signup' },
+    { label: 'Mike Castillo',   phone: '9725550102', sub: 'ST self-signup' },
+    { label: 'Tyler Brooks',    phone: '9725550201', sub: 'No completed jobs' },
   ];
 
   return `
@@ -1008,21 +1492,18 @@ function renderPortalTab() {
       <p style="color:var(--muted); font-size:14px; margin:0;">Interactive preview of what customers see when they visit the referral portal.</p>
     </div>
 
-    <!-- Info banner -->
     <div style="
       background:#eff6ff; border:1.5px solid #93c5fd; border-radius:12px;
       padding:14px 20px; margin-bottom:24px;
       display:flex; align-items:flex-start; gap:12px;
     ">
-      <span style="font-size:18px; flex-shrink:0;">📱</span>
+      <span style="font-size:18px; flex-shrink:0;">&#128241;</span>
       <div style="font-size:13px; color:#1e40af; line-height:1.5;">
         <strong>This is what your customers see.</strong> Enter any phone number below,
-        or click a demo account to preview the portal. This is a live preview using
-        the same API your WordPress plugin calls.
+        or click a demo account to preview the portal.
       </div>
     </div>
 
-    <!-- Quick-pick demo buttons -->
     <div style="margin-bottom:28px;">
       <div style="font-size:12px; font-weight:600; color:var(--muted);
                   text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;">
@@ -1079,13 +1560,11 @@ function renderPortalTab() {
       padding: 16px 12px 20px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.2), inset 0 0 0 2px #334155;
     ">
-      <!-- Notch -->
       <div style="
         width: 80px; height: 6px; background: #475569;
         border-radius: 3px; margin: 0 auto 12px;
       "></div>
 
-      <!-- Screen -->
       <div style="
         background: #f1f5f9;
         border-radius: 32px;
@@ -1094,10 +1573,8 @@ function renderPortalTab() {
         overflow: hidden;
       ">
 
-        <!-- Portal widget -->
         <div id="lex-portal-root">
 
-          <!-- Screen 1: Phone lookup -->
           <div id="lex-portal-lookup" class="lex-portal-screen active">
             <div class="lex-portal-card">
               <div class="lex-portal-icon"><img src="https://www.lexairconditioning.com/wp-content/uploads/2024/11/lex-air-web-transparent_badge-color.png" alt="LEX Air" style="width:56px; height:auto;" /></div>
@@ -1116,12 +1593,11 @@ function renderPortalTab() {
               </button>
               <p class="lex-portal-fine">
                 Not a LEX customer yet?
-                <a href="tel:9724661917">(972) 466-1917</a> — we'd love to help!
+                <a href="tel:9724661917">(972) 466-1917</a>
               </p>
             </div>
           </div>
 
-          <!-- Screen 2: Loading -->
           <div id="lex-portal-loading" class="lex-portal-screen">
             <div class="lex-portal-card" style="text-align:center; padding: 60px 24px;">
               <div class="lex-portal-spinner"></div>
@@ -1129,14 +1605,13 @@ function renderPortalTab() {
             </div>
           </div>
 
-          <!-- Screen 3: Not found -->
           <div id="lex-portal-notfound" class="lex-portal-screen">
             <div class="lex-portal-card" style="text-align:center;">
-              <div class="lex-portal-icon">🔍</div>
+              <div class="lex-portal-icon">&#128269;</div>
               <h2>Account Not Found</h2>
               <p class="lex-portal-sub">
                 We couldn't find an account with that number. Make sure you're using
-                the number on file with LEX, or give us a call and we'll look it up.
+                the number on file with LEX, or give us a call.
               </p>
               <a href="tel:9724661917" class="lex-portal-btn-primary">
                 Call (972) 466-1917
@@ -1147,25 +1622,22 @@ function renderPortalTab() {
             </div>
           </div>
 
-          <!-- Screen 4: No referral link yet -->
           <div id="lex-portal-nolink" class="lex-portal-screen">
             <div class="lex-portal-card" style="text-align:center;">
-              <div class="lex-portal-icon">⏳</div>
+              <div class="lex-portal-icon">&#9203;</div>
               <h2 id="lex-nolink-title">Almost Ready!</h2>
               <p class="lex-portal-sub" id="lex-nolink-message">
                 Your referral link is generated automatically after your first completed service.
-                If you've had a recent service, it may take up to 24 hours to appear.
               </p>
               <p class="lex-portal-sub" style="margin-top:12px;">
                 Questions? Call us at <a href="tel:9724661917">(972) 466-1917</a>.
               </p>
               <button class="lex-portal-btn-secondary" onclick="lexPortalReset()" style="margin-top:20px;">
-                ← Back
+                Back
               </button>
             </div>
           </div>
 
-          <!-- Screen 5: Main portal -->
           <div id="lex-portal-main" class="lex-portal-screen">
             <div class="lex-portal-card lex-portal-header-card">
               <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
@@ -1204,12 +1676,16 @@ function renderPortalTab() {
                 <input type="text" id="lex-portal-link-input" readonly />
                 <button onclick="lexPortalCopyLink()" id="lex-copy-btn">Copy</button>
               </div>
+              <div id="lex-portal-code-display" style="text-align:center; margin:10px 0 14px; display:none;">
+                <span style="font-size:12px; color:var(--muted);">Or share your code:</span>
+                <div style="font-size:22px; font-weight:700; color:var(--navy); letter-spacing:2px; margin-top:4px;" id="lex-portal-code-text"></div>
+              </div>
               <div class="lex-portal-share-buttons">
                 <a id="lex-portal-sms-btn" href="#" class="lex-portal-share-btn lex-share-sms">
-                  💬 Text a Friend
+                  Text a Friend
                 </a>
                 <a id="lex-portal-email-btn" href="#" class="lex-portal-share-btn lex-share-email">
-                  ✉️ Send Email
+                  Send Email
                 </a>
               </div>
             </div>
@@ -1235,7 +1711,7 @@ function renderPortalTab() {
                   <div class="lex-portal-step-num">3</div>
                   <div>
                     <strong>You both get rewarded</strong>
-                    <p>You automatically receive a <span id="lex-step-reward">$75</span> gift card by email.
+                    <p>You receive a <span id="lex-step-reward">$75</span> gift card.
                        They save <span id="lex-step-discount">$50</span> on their service.</p>
                   </div>
                 </div>
@@ -1255,18 +1731,13 @@ function renderPortalTab() {
           </div>
 
         </div>
-        <!-- /lex-portal-root -->
-
       </div>
-      <!-- /screen -->
 
-      <!-- Home indicator -->
       <div style="
         width: 100px; height: 4px; background: #475569;
         border-radius: 2px; margin: 12px auto 0;
       "></div>
     </div>
-    <!-- /phone frame -->
 
     <!-- Portal CSS -->
     <style>
@@ -1438,17 +1909,17 @@ function renderPortalTab() {
     <!-- Portal JS -->
     <script>
     (function() {
-      let currentData = null;
+      var currentData = null;
 
       function showScreen(id) {
-        document.querySelectorAll('.lex-portal-screen').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.lex-portal-screen').forEach(function(s) { s.classList.remove('active'); });
         document.getElementById(id).classList.add('active');
       }
 
-      const phoneInput = document.getElementById('lex-portal-phone');
+      var phoneInput = document.getElementById('lex-portal-phone');
       if (phoneInput) {
         phoneInput.addEventListener('input', function(e) {
-          let val = e.target.value.replace(/\\D/g, '').slice(0, 10);
+          var val = e.target.value.replace(/\\D/g, '').slice(0, 10);
           if (val.length >= 7) {
             val = '(' + val.slice(0,3) + ') ' + val.slice(3,6) + '-' + val.slice(6);
           } else if (val.length >= 4) {
@@ -1462,44 +1933,42 @@ function renderPortalTab() {
       }
 
       window.lexPortalLookup = async function() {
-        const raw = (phoneInput?.value || '').replace(/\\D/g, '');
-        const errorEl = document.getElementById('lex-portal-phone-error');
+        var raw = (phoneInput ? phoneInput.value : '').replace(/\\D/g, '');
+        var errorEl = document.getElementById('lex-portal-phone-error');
 
         if (raw.length < 10) {
           errorEl.textContent = 'Please enter a valid 10-digit phone number.';
           errorEl.style.display = 'block';
-          phoneInput.focus();
+          if (phoneInput) phoneInput.focus();
           return;
         }
         errorEl.style.display = 'none';
 
-        const btn = document.getElementById('lex-portal-lookup-btn');
+        var btn = document.getElementById('lex-portal-lookup-btn');
         btn.classList.add('loading');
         btn.textContent = 'Looking up...';
         showScreen('lex-portal-loading');
 
         try {
-          const res = await fetch('/api/portal/lookup', {
+          var res = await fetch('/api/portal/lookup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: raw }),
           });
 
-          const data = await res.json();
+          var data = await res.json();
 
-          // Not a LEX customer
           if (res.status === 404) {
             resetNotFoundScreen();
             showScreen('lex-portal-notfound');
             return;
           }
 
-          // ST unreachable
           if (res.status === 503) {
             var nfCard = document.getElementById('lex-portal-notfound');
             nfCard.querySelector('h2').textContent = 'Unable to Verify Account';
             nfCard.querySelector('.lex-portal-sub').textContent =
-              data.message || 'We are having trouble verifying your account right now. Please call us at (972) 466-1917.';
+              data.message || 'We are having trouble verifying your account right now.';
             showScreen('lex-portal-notfound');
             return;
           }
@@ -1510,7 +1979,6 @@ function renderPortalTab() {
             return;
           }
 
-          // Found but no completed jobs yet
           if (!data.hasReferralLink) {
             var titleEl = document.getElementById('lex-nolink-title');
             var messageEl = document.getElementById('lex-nolink-message');
@@ -1526,11 +1994,9 @@ function renderPortalTab() {
             return;
           }
 
-          // Has a referral link
           currentData = data;
           populatePortal(data);
 
-          // Welcome banner for brand new self-signups
           if (data.isNew) {
             showWelcomeBanner(data.name);
           }
@@ -1548,37 +2014,47 @@ function renderPortalTab() {
       };
 
       function populatePortal(data) {
-        const firstName = data.name.split(' ')[0];
-        const initials = data.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        var firstName = data.name.split(' ')[0];
+        var initials = data.name.split(' ').map(function(w) { return w[0]; }).join('').slice(0, 2).toUpperCase();
         document.getElementById('lex-portal-name').textContent = data.name;
         document.getElementById('lex-portal-avatar').textContent = initials;
 
         document.getElementById('lex-portal-total-referrals').textContent = data.totalReferrals;
         document.getElementById('lex-portal-total-rewards').textContent = '$' + (data.totalRewards || 0);
-        const pending = (data.referrals || []).filter(r => ['pending','booked','completed'].includes(r.status)).length;
+        var pending = (data.referrals || []).filter(function(r) { return ['pending','booked','completed'].includes(r.status); }).length;
         document.getElementById('lex-portal-pending-count').textContent = pending;
 
-        const reward = data.rewardAmount || 75;
-        const discount = data.discountAmount || 50;
+        var reward = data.rewardAmount || 75;
+        var discount = data.discountAmount || 50;
         document.getElementById('lex-reward-amount-display').textContent = '$' + reward;
         document.getElementById('lex-discount-amount-display').textContent = '$' + discount;
         document.getElementById('lex-step-reward').textContent = '$' + reward;
         document.getElementById('lex-step-discount').textContent = '$' + discount;
 
-        const linkInput = document.getElementById('lex-portal-link-input');
+        var linkInput = document.getElementById('lex-portal-link-input');
         linkInput.value = data.referralLink;
 
-        const smsMsg = encodeURIComponent(
+        // Show short code if available
+        var codeDisplay = document.getElementById('lex-portal-code-display');
+        var codeText = document.getElementById('lex-portal-code-text');
+        if (data.referralCode) {
+          codeText.textContent = data.referralCode;
+          codeDisplay.style.display = 'block';
+        } else {
+          codeDisplay.style.display = 'none';
+        }
+
+        var smsMsg = encodeURIComponent(
           'Hey! I use LEX Air Conditioning for all my home services in DFW. ' +
           'Use my link to save $' + discount + ' on your first service: ' + data.referralLink
         );
         document.getElementById('lex-portal-sms-btn').href = 'sms:?&body=' + smsMsg;
 
-        const emailSubject = encodeURIComponent(firstName + ' thinks you would love LEX Air Conditioning');
-        const emailBody = encodeURIComponent(
+        var emailSubject = encodeURIComponent(firstName + ' thinks you would love LEX Air Conditioning');
+        var emailBody = encodeURIComponent(
           'Hey,\\n\\nI have been using LEX Air Conditioning for HVAC, plumbing, and electrical work here in DFW and they are great.\\n\\n' +
           'Use my referral link to save $' + discount + ' on your first service:\\n' + data.referralLink + '\\n\\n' +
-          'They have been in business since 2004 and have over 2,000 reviews. Highly recommend!\\n\\n— ' + data.name
+          'They have been in business since 2004 and have over 2,000 reviews. Highly recommend!\\n\\n' + data.name
         );
         document.getElementById('lex-portal-email-btn').href = 'mailto:?subject=' + emailSubject + '&body=' + emailBody;
 
@@ -1586,8 +2062,8 @@ function renderPortalTab() {
       }
 
       function renderReferralHistory(referrals) {
-        const list = document.getElementById('lex-portal-referral-list');
-        const card = document.getElementById('lex-portal-history-card');
+        var list = document.getElementById('lex-portal-referral-list');
+        var card = document.getElementById('lex-portal-history-card');
 
         if (!referrals.length) {
           card.style.display = 'none';
@@ -1595,20 +2071,20 @@ function renderPortalTab() {
         }
         card.style.display = 'block';
 
-        const statusMap = {
+        var statusMap = {
           pending:   { label: 'Link Clicked',  cls: 'badge-pending'   },
           booked:    { label: 'Booked',         cls: 'badge-booked'    },
           completed: { label: 'Processing',     cls: 'badge-completed' },
-          rewarded:  { label: '✓ Rewarded',     cls: 'badge-rewarded'  },
+          rewarded:  { label: 'Rewarded',       cls: 'badge-rewarded'  },
           rejected:  { label: 'Not Qualified',  cls: 'badge-rejected'  },
         };
 
-        list.innerHTML = referrals.map(r => {
-          const s = statusMap[r.status] || { label: r.status, cls: 'badge-pending' };
-          const date = r.created_at
+        list.innerHTML = referrals.map(function(r) {
+          var s = statusMap[r.status] || { label: r.status, cls: 'badge-pending' };
+          var date = r.created_at
             ? new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             : '';
-          const name = r.referred_name || 'Referral Pending';
+          var name = r.referred_name || 'Referral Pending';
           return '<div class="lex-portal-referral-item">' +
             '<div>' +
               '<div class="lex-portal-ref-name">' + name + '</div>' +
@@ -1628,11 +2104,11 @@ function renderPortalTab() {
           'display:flex; align-items:center; gap:12px;' +
           'animation: lex-fadein 0.4s ease;';
         banner.innerHTML =
-          '<span style="font-size:24px;">🎉</span>' +
+          '<span style="font-size:24px;">&#127881;</span>' +
           '<div>' +
             '<strong style="color:#065f46;">Welcome to the LEX Referral Program, ' + firstName + '!</strong>' +
             '<p style="margin:3px 0 0; font-size:13px; color:#047857;">' +
-              'Your referral link is ready. Start sharing and earn a $' + (currentData?.rewardAmount || 75) + ' gift card for every friend who completes a service!' +
+              'Your referral link is ready. Start sharing and earn rewards!' +
             '</p>' +
           '</div>';
         var mainScreen = document.getElementById('lex-portal-main');
@@ -1649,33 +2125,33 @@ function renderPortalTab() {
         if (nfCard) {
           nfCard.querySelector('h2').textContent = 'Account Not Found';
           nfCard.querySelector('.lex-portal-sub').textContent =
-            'We couldn\\'t find an account with that number. Make sure you\\'re using the number on file with LEX, or give us a call and we\\'ll look it up.';
+            'We couldn\\'t find an account with that number. Make sure you\\'re using the number on file with LEX, or give us a call.';
         }
       }
 
       window.lexPortalCopyLink = function() {
-        const input = document.getElementById('lex-portal-link-input');
+        var input = document.getElementById('lex-portal-link-input');
         input.select();
         input.setSelectionRange(0, 99999);
-        navigator.clipboard.writeText(input.value).catch(() => {
+        navigator.clipboard.writeText(input.value).catch(function() {
           document.execCommand('copy');
         });
-        const btn = document.getElementById('lex-copy-btn');
-        btn.textContent = '✅ Copied!';
-        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+        var btn = document.getElementById('lex-copy-btn');
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
       };
 
       window.lexPortalReset = function() {
         currentData = null;
         if (phoneInput) phoneInput.value = '';
-        const errorEl = document.getElementById('lex-portal-phone-error');
+        var errorEl = document.getElementById('lex-portal-phone-error');
         if (errorEl) errorEl.style.display = 'none';
         showScreen('lex-portal-lookup');
       };
 
       window.portalQuickPick = function(phone) {
-        const d = phone.replace(/\\D/g, '');
-        const formatted = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+        var d = phone.replace(/\\D/g, '');
+        var formatted = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
         if (phoneInput) {
           phoneInput.value = formatted;
           lexPortalLookup();
