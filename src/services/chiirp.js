@@ -1,84 +1,86 @@
 const axios = require('axios');
 const supabase = require('../db');
 
-const CHIIRP_BASE = 'https://api.chiirp.com/v1';
+const CHIIRP_WEBHOOK_URL = process.env.CHIIRP_WEBHOOK_URL;
 
 /**
- * Sends a text message via Chiirp API.
- * Logs the message to texts_log table.
+ * Triggers a Chiirp webhook with customer data.
+ * Chiirp handles the messaging automation from there.
+ * Logs the event to texts_log table.
  */
-async function sendText({ to, message, customerId = null, referralId = null }) {
+async function sendText({ to, message, customerId = null, referralId = null, webhookData = {} }) {
   try {
     const response = await axios.post(
-      `${CHIIRP_BASE}/messages`,
+      CHIIRP_WEBHOOK_URL,
       {
-        to,
-        from: process.env.CHIIRP_FROM_NUMBER,
-        body: message,
+        phone: to,
+        ...webhookData,
       },
       {
-        headers: {
-          Authorization: `Bearer ${process.env.CHIIRP_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       }
     );
-
-    const chiirpMsgId = response.data?.id || null;
 
     await supabase.from('texts_log').insert({
       customer_id: customerId,
       referral_id: referralId,
       phone: to,
       message,
-      chiirp_msg_id: chiirpMsgId,
       status: 'sent',
     });
 
-    console.log(`[Chiirp] Text sent to ${to} | Msg ID: ${chiirpMsgId}`);
-    return { success: true, chiirpMsgId };
+    console.log(`[Chiirp] Webhook triggered for ${to}`);
+    return { success: true };
   } catch (err) {
-    console.error('[Chiirp] Failed to send text:', err.response?.data || err.message);
+    console.error('[Chiirp] Webhook failed:', err.response?.data || err.message);
     return { success: false, error: err.message };
   }
 }
 
 /**
- * Sends the referral invite text to a customer after their job completes.
- * Includes both the full link and the short referral code.
+ * Sends the referral invite to a customer after their job completes.
+ * Posts customer data to the Chiirp webhook — Chiirp handles the text content.
  */
 async function sendReferralInvite(customer) {
-  const { name, phone, referral_link, referral_code, id: customerId } = customer;
+  const { name, phone, referral_link, referral_code, referral_slug, id: customerId } = customer;
   const firstName = name.split(' ')[0];
-  const discount = process.env.NEW_CUSTOMER_DISCOUNT || '50';
-  const reward = process.env.REFERRER_REWARD || '75';
 
-  const codeLine = referral_code ? `\nYour code: ${referral_code}` : '';
+  const message = `Referral invite triggered for ${firstName}`;
 
-  const message =
-    `Hey ${firstName}! Thanks for choosing LEX Air Conditioning.\n\n` +
-    `Know someone who needs AC, heating, plumbing, or electrical work? ` +
-    `Share your personal link and when they complete their first service, ` +
-    `you get a $${reward} gift card and they save $${discount}!\n\n` +
-    `Your link: ${referral_link}${codeLine}\n\n` +
-    `Reply STOP to opt out.`;
-
-  return wrappedSendText({ to: phone, message, customerId });
+  return wrappedSendText({
+    to: phone,
+    message,
+    customerId,
+    webhookData: {
+      first_name: firstName,
+      referral_code: referral_code || '',
+      referral_slug: referral_slug || '',
+      referral_link: referral_link || '',
+    },
+  });
 }
 
 /**
- * Sends a reward notification text to the referrer after a payout is recorded.
+ * Sends a reward notification to the referrer after a payout is recorded.
+ * Posts data to the Chiirp webhook — Chiirp handles the text content.
  */
 async function sendRewardNotification(customer, referredName, amount, paymentMethod) {
   const firstName = customer.name.split(' ')[0];
   const referredFirst = (referredName || 'your friend').split(' ')[0];
-  const methodLabel = paymentMethod === 'physical_card' ? 'gift card in the mail' : 'gift card via email';
 
-  const message =
-    `Great news, ${firstName}! ${referredFirst} just completed their first LEX service. ` +
-    `Your $${amount} ${methodLabel} is on the way!`;
+  const message = `Reward notification triggered for ${firstName}`;
 
-  return wrappedSendText({ to: customer.phone, message, customerId: customer.id });
+  return wrappedSendText({
+    to: customer.phone,
+    message,
+    customerId: customer.id,
+    webhookData: {
+      first_name: firstName,
+      referred_name: referredFirst,
+      reward_amount: String(amount),
+      payment_method: paymentMethod,
+    },
+  });
 }
 
 const { demoSendText } = require('./demoMode');
