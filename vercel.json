@@ -11,11 +11,5 @@
       "src": "/(.*)",
       "dest": "src/index.js"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/poll-jobs",
-      "schedule": "*/30 * * * *"
-    }
   ]
 }

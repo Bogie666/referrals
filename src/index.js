@@ -8,8 +8,10 @@ const webhookRoutes = require('./routes/webhooks');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const cronRoutes = require('./routes/cron');
+const bookRoute = require('./routes/book');
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 // ── Security: relax CSP so Chart.js CDN works in admin dashboard
@@ -50,6 +52,7 @@ app.use('/webhooks', webhookRoutes);
 app.use('/api', apiRoutes);
 app.use('/admin', adminRoutes);
 app.use('/api/cron', cronRoutes);
+app.use('/book', bookRoute);
 
 // ── Health check ──
 app.get('/health', (req, res) => {
