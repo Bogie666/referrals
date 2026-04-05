@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser');
 const webhookRoutes = require('./routes/webhooks');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
+const cronRoutes = require('./routes/cron');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -48,6 +49,7 @@ app.use('/admin/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: 
 app.use('/webhooks', webhookRoutes);
 app.use('/api', apiRoutes);
 app.use('/admin', adminRoutes);
+app.use('/api/cron', cronRoutes);
 
 // ── Health check ──
 app.get('/health', (req, res) => {
