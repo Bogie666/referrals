@@ -14,7 +14,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../db');
-const { generateSlug, buildReferralLink } = require('../utils/slugs');
+// slug utils no longer needed — referral links are code-based now
 const {
   getAccessToken,
   getCompletedJobs,
@@ -163,13 +163,10 @@ async function processJob(job, token, results) {
   const name = toTitleCase(customer.name || 'Valued Customer');
 
   // ── Generate referral code + slug ────────────────────────
-  const slug = generateSlug(name);
-  const referralLink = buildReferralLink(slug);
-
-  // Short code format: FIRSTNAME-LAST4PHONE or FIRSTNAME-XXXX
   const firstName = name.split(' ')[0].toUpperCase().slice(0, 6);
-  const codeSuffix = phone.length >= 4 ? phone.slice(-4) : slug.split('-').pop().toUpperCase();
-  const referralCode = `${firstName}-${codeSuffix}`;
+  const codeSuffix = phone.length >= 4 ? phone.slice(-4) : Math.random().toString(36).slice(2,6).toUpperCase();
+  const referralCode = firstName + '-' + codeSuffix;
+  const referralLink = 'https://lexperks.com/referral?r=' + referralCode;
 
   console.log(`[Poller] Generated code for ${name}: ${referralCode}`);
 
@@ -189,7 +186,7 @@ async function processJob(job, token, results) {
   const dbCustomer = await upsertCustomerInSupabase(
     { ...customer, name },
     referralCode,
-    { slug, referralLink, phone, email, stCustomerId: String(customerId) }
+    { referralCode, referralLink, phone, email, stCustomerId: String(customerId) }
   );
 
   results.codesGenerated++;
@@ -214,12 +211,12 @@ async function processJob(job, token, results) {
     return;
   }
 
-  await sendChiirpInvite({ name, phone, referralCode, slug, referralLink, customerId: dbCustomer?.id });
+  await sendChiirpInvite({ name, phone, referralCode, referralLink, customerId: dbCustomer?.id });
   results.textsSent++;
 }
 
 // ── Send Chiirp webhook ───────────────────────────────────────
-async function sendChiirpInvite({ name, phone, referralCode, slug, referralLink, customerId }) {
+async function sendChiirpInvite({ name, phone, referralCode, referralLink, customerId }) {
   if (!CHIIRP_WEBHOOK) {
     console.warn('[Poller] CHIIRP_WEBHOOK_URL not set — skipping text');
     return;
@@ -233,7 +230,6 @@ async function sendChiirpInvite({ name, phone, referralCode, slug, referralLink,
     first_name:    firstName,
     phone:         formattedPhone,
     referral_code: referralCode,
-    referral_slug: slug,
     referral_link: referralLink,
   };
 
@@ -267,7 +263,7 @@ async function sendChiirpInvite({ name, phone, referralCode, slug, referralLink,
 // ── Upsert customer in Supabase ───────────────────────────────
 async function upsertCustomerInSupabase(stCustomer, referralCode, extras = {}) {
   const {
-    slug,
+    referralCode: code,
     referralLink,
     phone,
     email,

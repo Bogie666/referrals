@@ -13,7 +13,7 @@ router.get('/referral/:slugOrCode', async (req, res) => {
   const { data: customer, error } = await supabase
     .from('customers')
     .select('id, name, referral_slug, referral_code, referral_link, total_referrals')
-    .or(`referral_slug.eq.${slugOrCode},referral_code.eq.${slugOrCode}`)
+    .or('referral_slug.eq.' + slugOrCode + ',referral_code.eq.' + slugOrCode.toUpperCase())
     .single();
 
   if (error || !customer) {
@@ -43,7 +43,7 @@ router.post('/referral/click', async (req, res) => {
   const { data: customer } = await supabase
     .from('customers')
     .select('id')
-    .or(`referral_slug.eq.${slug},referral_code.eq.${slug}`)
+    .or('referral_slug.eq.' + slug + ',referral_code.eq.' + slug.toUpperCase())
     .single();
 
   if (!customer) return res.status(404).json({ error: 'Invalid referral link' });
