@@ -167,8 +167,8 @@ router.get('/', (req, res) => {
       }, 300);
     });
   </script>
-  <link rel="stylesheet" href="${SCHEDULER_URL}/lex-scheduler.css" />
-  <script src="${SCHEDULER_URL}/lex-scheduler.iife.js"></script>
+  <link rel="stylesheet" href="` + SCHEDULER_URL + `/lex-scheduler.css" />
+  <script src="` + SCHEDULER_URL + `/lex-scheduler.iife.js"></script>
 
 </body>
 </html>`);
