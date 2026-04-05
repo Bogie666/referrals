@@ -9,6 +9,7 @@ const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
 const cronRoutes = require('./routes/cron');
 const bookRoute = require('./routes/book');
+const referralRoute = require('./routes/referral');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -53,6 +54,7 @@ app.use('/api', apiRoutes);
 app.use('/admin', adminRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/book', bookRoute);
+app.use('/referral', referralRoute);
 
 // ── Health check ──
 app.get('/health', (req, res) => {
