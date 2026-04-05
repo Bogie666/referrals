@@ -115,19 +115,6 @@ router.get('/', (req, res) => {
     .page-footer a { color: #1d3a6e; text-decoration: none; }
     .page-footer a:hover { text-decoration: underline; }
 
-    /* ── Override widget modal to inline ── */
-    .lex-widget-modal-override .fixed {
-      position: relative !important;
-      inset: auto !important;
-      background: transparent !important;
-      backdrop-filter: none !important;
-      padding: 0 !important;
-    }
-    .lex-widget-modal-override .rounded-2xl {
-      border-radius: 0 !important;
-      max-height: none !important;
-      box-shadow: none !important;
-    }
   </style>
 </head>
 <body>
@@ -155,10 +142,6 @@ router.get('/', (req, res) => {
       <p>HVAC · Plumbing · Electrical · Serving DFW since 2004</p>
     </div>
 
-    <div id="lex-scheduler-container" class="lex-widget-modal-override">
-      <!-- Scheduler widget renders here -->
-    </div>
-
     <div class="page-footer">
       <p>
         Need immediate help? Call <a href="tel:9724661917">(972) 466-1917</a>
@@ -168,18 +151,23 @@ router.get('/', (req, res) => {
     </div>
   </div>
 
-  <!-- Scheduler widget config -->
   <script>
     window.LEXSchedulerConfig = {
-      apiEndpoint:  '${BOOKING_API}',
-      autoButton:   false,         // no floating button — we're embedding inline
-      autoOpen:     true,          // open immediately
-      referralCode: '${referralCode.toUpperCase()}' || null,
-      referralSlug: '${slug}' || null,
-      container:    '#lex-scheduler-container',
+      apiEndpoint: '${BOOKING_API}',
+      autoButton:  false,
+      ${slug ? `referralSlug: '${slug}',` : ''}
+      ${referralCode ? `referralCode: '${referralCode.toUpperCase()}',` : ''}
     };
+
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (window.LEXScheduler && window.LEXScheduler.open) {
+          LEXScheduler.open();
+        }
+      }, 300);
+    });
   </script>
-  <link  rel="stylesheet" href="${SCHEDULER_URL}/lex-scheduler.css" />
+  <link rel="stylesheet" href="${SCHEDULER_URL}/lex-scheduler.css" />
   <script src="${SCHEDULER_URL}/lex-scheduler.iife.js"></script>
 
 </body>
