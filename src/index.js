@@ -1,4 +1,15 @@
 require('dotenv').config();
+
+// ── Startup checks — fail fast if critical env vars are missing ──
+const REQUIRED_ENV = ['SESSION_SECRET'];
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    console.error(`❌  Missing required environment variable: ${key}`);
+    console.error(`    Add it to your .env file or hosting environment.`);
+    process.exit(1);
+  }
+}
+
 const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
