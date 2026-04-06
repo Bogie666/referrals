@@ -507,12 +507,104 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
       padding: 6px 14px; font-size: 12px; border-radius: 6px;
       border: none; cursor: pointer; font-weight: 600;
     }
+
+    /* -- Hamburger menu button (mobile) -- */
+    .hamburger {
+      display: none;
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 200;
+      background: var(--navy);
+      border: none;
+      border-radius: 8px;
+      padding: 10px;
+      cursor: pointer;
+      color: #fff;
+      width: 42px;
+      height: 42px;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .hamburger svg { display: block; }
+    .hamburger:hover { background: #162d57; }
+
+    /* -- Sidebar overlay backdrop (mobile) -- */
+    .sidebar-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 99;
+    }
+    .sidebar-backdrop.active { display: block; }
+
+    /* -- Mobile responsive -- */
+    @media (max-width: 768px) {
+      .hamburger { display: flex; }
+
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      .sidebar.open { transform: translateX(0); }
+
+      .main {
+        margin-left: 0;
+        max-width: 100%;
+        padding: 72px 16px 24px;
+      }
+
+      .page-header h2 { font-size: 20px; }
+
+      .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+      }
+      .stat-card { padding: 16px; }
+      .stat-card .stat-value { font-size: 24px; }
+
+      .pipeline-card { padding: 16px; }
+      .pipeline-stages { height: 36px; }
+      .pipeline-labels { gap: 10px; }
+
+      .two-col { grid-template-columns: 1fr; }
+
+      .chart-wrap { height: 200px; padding: 14px; }
+
+      .filter-bar { gap: 6px; }
+      .filter-btn { padding: 6px 12px; font-size: 12px; }
+
+      thead th { padding: 8px 10px; font-size: 10px; }
+      tbody td { padding: 10px; font-size: 12px; }
+
+      .form-row { flex-direction: column; gap: 0; }
+      .settings-card { padding: 16px; }
+
+      .modal-box { margin: 16px; padding: 24px; }
+
+      .card-header { padding: 14px 16px 10px; }
+      .card-header h3 { font-size: 14px; }
+
+      .activity-item { padding: 10px 14px; }
+    }
   </style>
 </head>
 <body>
 
+<!-- -- Hamburger button (mobile) -- -->
+<button class="hamburger" id="hamburger-btn" aria-label="Toggle menu" onclick="toggleSidebar()">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+    <line x1="3" y1="6" x2="21" y2="6"/>
+    <line x1="3" y1="12" x2="21" y2="12"/>
+    <line x1="3" y1="18" x2="21" y2="18"/>
+  </svg>
+</button>
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
 <!-- -- Sidebar -- -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <h1>LEX Referral</h1>
     <p>Admin Dashboard</p>
@@ -687,6 +779,19 @@ async function submitPayout() {
     btn.disabled = false;
   }
 }
+
+// -- Mobile sidebar toggle --
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-backdrop').classList.toggle('active');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('active');
+}
+document.querySelectorAll('.sidebar-nav a, .sidebar-footer a').forEach(function(link) {
+  link.addEventListener('click', closeSidebar);
+});
 </script>
 </body>
 </html>`;
