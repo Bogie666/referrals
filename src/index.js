@@ -4,6 +4,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 
+const cors = require('cors');
+
 const webhookRoutes = require('./routes/webhooks');
 const apiRoutes = require('./routes/api');
 const adminRoutes = require('./routes/admin');
@@ -34,15 +36,18 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ── CORS: only on public API routes ──
-app.use('/api', (req, res, next) => {
-  const allowedOrigin = process.env.SITE_URL || 'https://lexair.com';
-  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
+// ── CORS ──
+app.use(cors({
+  origin: [
+    'https://lexairconditioning.com',
+    'https://www.lexairconditioning.com',
+    'https://lexperks.com',
+    'https://www.lexperks.com',
+    'http://localhost:3000',
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 // ── Rate limiting ──
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: { error: 'Too many requests' } }));
