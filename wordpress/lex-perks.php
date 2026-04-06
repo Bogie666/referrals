@@ -91,28 +91,21 @@ function lex_referral_shortcode() {
           Schedule your first HVAC, plumbing, or electrical service to unlock both rewards.
         </p>
 
+        <div style="text-align:center; margin-bottom:16px;">
+          <button onclick="if(typeof LEXScheduler!=='undefined'){LEXScheduler.open();}else{window.location.href='tel:9724661917';}" class="lex-ref-btn-primary">
+            📅 Book Online
+          </button>
+        </div>
         <div style="text-align:center; margin-bottom:24px;">
-          <a href="tel:9724661917" class="lex-ref-btn-primary">
-            📞 Call to Book: (972) 466-1917
+          <a href="tel:9724661917" class="lex-ref-btn-secondary">
+            📞 Or Call: (972) 466-1917
           </a>
         </div>
 
-        <!-- Share section — visible when referrer views their own link -->
-        <div id="lex-ref-share" style="border-top:1px solid #e2e8f0; padding-top:24px; margin-top:8px; display:none;">
-          <h3 style="text-align:center; margin:0 0 16px; color:#1d3a6e;">Share Your Link</h3>
-          <div class="lex-ref-link-row">
-            <input type="text" id="lex-ref-link-input" readonly />
-            <button onclick="lexCopyLink()" id="lex-copy-btn">Copy</button>
-          </div>
-          <div style="text-align:center; margin-top:16px;">
-            <a id="lex-sms-share" href="#" class="lex-ref-btn-secondary">
-              💬 Share via Text
-            </a>
-          </div>
-        </div>
+
 
         <p style="text-align:center; font-size:12px; color:#94a3b8; margin-top:28px; line-height:1.5;">
-          Reward paid after friend's first completed service (minimum $<?php echo LEX_DISCOUNT; ?> job).
+          Reward paid after friend's first completed service (minimum $350 job).
           One reward per household. LEX Air Conditioning — Serving DFW since 2004.
         </p>
 
@@ -245,34 +238,31 @@ function lex_referral_shortcode() {
         }
 
         try {
-          const res = await fetch(API + '/api/referral/' + slug);
-          if (!res.ok) throw new Error('not found');
+          const res = await fetch(API + '/api/referral/' + encodeURIComponent(slug));
           const data = await res.json();
 
-          document.getElementById('lex-ref-headline').textContent =
-            data.referrerFirstName + ' wants to save you money on home services!';
-          document.getElementById('lex-ref-subline').textContent =
-            'Get $' + (data.discount || DISCOUNT) + ' off your first LEX service through their referral.';
-          document.getElementById('lex-referrer-name').textContent = data.referrerFirstName;
-          document.getElementById('lex-discount-amount').textContent = '$' + (data.discount || DISCOUNT);
-          document.getElementById('lex-reward-amount').textContent  = '$' + (data.reward || REWARD);
+          if (!res.ok || data.error) throw new Error(data.error || 'not found');
 
-          // Show share tools if referrer is viewing their own link
-          const linkInput = document.getElementById('lex-ref-link-input');
-          if (data.referralLink) {
-            linkInput.value = data.referralLink;
-            document.getElementById('lex-ref-share').style.display = 'block';
-            const smsMsg = encodeURIComponent(
-              'Hey! Use my LEX Air Conditioning referral link to save $' + (data.discount || DISCOUNT) +
-              ' on your first HVAC, plumbing, or electrical service: ' + data.referralLink
-            );
-            document.getElementById('lex-sms-share').href = 'sms:?&body=' + smsMsg;
-          }
+          const firstName = data.referrerFirstName || data.name || 'A friend';
+          const discount  = data.discount || DISCOUNT;
+          const reward    = data.reward   || REWARD;
+
+          document.getElementById('lex-ref-headline').textContent =
+            firstName + ' wants to save you money on home services!';
+          document.getElementById('lex-ref-subline').textContent =
+            'Get $' + discount + ' off your first LEX service through their referral.';
+          document.getElementById('lex-referrer-name').textContent = firstName;
+          document.getElementById('lex-discount-amount').textContent = '$' + discount;
+          document.getElementById('lex-reward-amount').textContent   = '$' + reward;
+
+          // Share tools removed — link exists for reference only
+          const link = data.referralLink || data.referral_link || '';
 
           document.getElementById('lex-ref-loading').style.display = 'none';
           document.getElementById('lex-ref-card').style.display    = 'block';
 
         } catch (e) {
+          console.error('[LEX Referral] Error:', e.message);
           document.getElementById('lex-ref-loading').style.display  = 'none';
           document.getElementById('lex-ref-invalid').style.display  = 'block';
         }
