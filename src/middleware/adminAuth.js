@@ -32,7 +32,10 @@ function destroySession(token) {
 }
 
 function sign(payload) {
-  const secret = process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'fallback-secret';
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    throw new Error('SESSION_SECRET environment variable is required');
+  }
   return crypto.createHmac('sha256', secret).update(payload).digest('hex');
 }
 
@@ -88,8 +91,7 @@ function requireAdmin(req, res, next) {
 /**
  * Middleware: require super_admin role.
  */
-function requireSuperAdmin(req, res, next) {
-  // First run requireAdmin logic
+async function requireSuperAdmin(req, res, next) {
   const token = req.cookies?.lex_admin_session;
   const session = parseSession(token);
 
@@ -97,17 +99,18 @@ function requireSuperAdmin(req, res, next) {
 
   req.adminUserId = session.userId;
 
-  // Check role async
-  supabase
-    .from('admin_users')
-    .select('role')
-    .eq('id', session.userId)
-    .single()
-    .then(({ data }) => {
-      if (data?.role === 'super_admin') return next();
-      res.status(403).json({ error: 'Requires super_admin role' });
-    })
-    .catch(() => res.status(403).json({ error: 'Unauthorized' }));
+  try {
+    const { data } = await supabase
+      .from('admin_users')
+      .select('role')
+      .eq('id', session.userId)
+      .single();
+
+    if (data?.role === 'super_admin') return next();
+    return res.status(403).json({ error: 'Requires super_admin role' });
+  } catch {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
 }
 
 module.exports = { requireAdmin, requireSuperAdmin, createSession, parseSession, destroySession, authenticateUser, hashPassword };
