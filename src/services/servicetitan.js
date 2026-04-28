@@ -198,6 +198,55 @@ async function writeReferralCodeToCustomer(token, customerId, referralCode, type
   }
 }
 
+// ── Get invoice for a job (line items + total) ────────────────
+/**
+ * Fetches the invoice associated with a job, returning the
+ * total and line items for payout calculation.
+ *
+ * @param {string} token
+ * @param {number|string} jobId
+ * @returns {{ total: number, items: Array }|null}
+ */
+async function getInvoiceForJob(token, jobId) {
+  if (process.env.DEMO_MODE === 'true') {
+    return { total: 0, items: [] };
+  }
+
+  try {
+    const res = await axios.get(
+      `${ST_API_BASE}/accounting/v2/tenant/${TENANT_ID}/invoices`,
+      {
+        headers: stHeaders(token),
+        params: { jobIds: String(jobId), pageSize: 50 },
+      }
+    );
+
+    const invoices = res.data?.data || [];
+    if (!invoices.length) return null;
+
+    // A job can have multiple invoices (e.g. progress invoicing). Aggregate.
+    const items = [];
+    let total = 0;
+    for (const inv of invoices) {
+      total += parseFloat(inv.total || inv.subtotal || 0);
+      const invItems = inv.items || inv.lineItems || [];
+      for (const it of invItems) {
+        items.push({
+          code: it.skuCode || it.code || it.sku || '',
+          name: it.skuName || it.description || it.name || '',
+          quantity: it.quantity,
+          total: it.total,
+        });
+      }
+    }
+    return { total, items };
+
+  } catch (err) {
+    console.error(`[ST API] getInvoiceForJob ${jobId} failed:`, err.response?.data || err.message);
+    return null;
+  }
+}
+
 // ── Customer lookup by phone (for portal self-signup) ─────────
 /**
  * @param {string} phone - 10-digit normalized phone
@@ -338,6 +387,7 @@ module.exports = {
   getCompletedJobs,
   getCustomer,
   getCustomerContacts,
+  getInvoiceForJob,
   writeReferralCodeToCustomer,
   findCustomerByPhone,
   getCompletedJobCount,

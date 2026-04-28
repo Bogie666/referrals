@@ -23,14 +23,33 @@ const {
   getCompletedJobs,
   getCustomer,
   getCustomerContacts,
+  getInvoiceForJob,
   writeReferralCodeToCustomer,
 } = require('../services/servicetitan');
+const { calculatePayout } = require('../utils/payout');
 
 const REFERRAL_BASE_URL = process.env.REFERRAL_BASE_URL || 'https://lexperks.com/referral';
-const MIN_JOB_VALUE   = parseFloat(process.env.MIN_JOB_VALUE || '150');
 const CHIIRP_WEBHOOK  = process.env.CHIIRP_WEBHOOK_URL;
 const CRON_SECRET     = process.env.CRON_SECRET;
 const DEMO_MODE       = process.env.DEMO_MODE === 'true';
+
+const PAYOUT_SETTING_KEYS = [
+  'min_job_value',
+  'payout_percentage',
+  'payout_cap',
+  'membership_flat',
+  'membership_item_codes',
+];
+
+async function loadPayoutSettings() {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('key, value')
+    .in('key', PAYOUT_SETTING_KEYS);
+  const out = {};
+  (data || []).forEach(row => { out[row.key] = row.value; });
+  return out;
+}
 
 // ── Auth middleware ───────────────────────────────────────────
 // Vercel cron calls include an Authorization header automatically.
@@ -86,6 +105,9 @@ router.get('/poll-jobs', verifyCronAuth, async (req, res) => {
     // ── Get access token ───────────────────────────────────────
     const token = await getAccessToken();
 
+    // ── Load payout settings (admin-editable) ──────────────────
+    const payoutSettings = await loadPayoutSettings();
+
     // ── Fetch completed jobs ───────────────────────────────────
     const jobs = await getCompletedJobs(token, since.toISOString());
     results.jobsFound = jobs.length;
@@ -94,7 +116,7 @@ router.get('/poll-jobs', verifyCronAuth, async (req, res) => {
     // ── Process each job ───────────────────────────────────────
     for (const job of jobs) {
       try {
-        await processJob(job, token, results);
+        await processJob(job, token, payoutSettings, results);
       } catch (err) {
         console.error(`[Poller] Error processing job ${job.id}:`, err.message);
         results.errors.push({ jobId: job.id, error: err.message });
@@ -119,12 +141,16 @@ router.get('/poll-jobs', verifyCronAuth, async (req, res) => {
 });
 
 // ── Process a single completed job ───────────────────────────
-async function processJob(job, token, results) {
+async function processJob(job, token, payoutSettings, results) {
   const { id: jobId, customerId, total, completedOn } = job;
 
+  const minJobValue = parseFloat(
+    payoutSettings.min_job_value ?? process.env.MIN_JOB_VALUE ?? '150'
+  );
+
   // ── Filter: minimum job value ──────────────────────────────
-  if ((total || 0) < MIN_JOB_VALUE) {
-    console.log(`[Poller] Job ${jobId} skipped — total $${total} below minimum $${MIN_JOB_VALUE}`);
+  if ((total || 0) < minJobValue) {
+    console.log(`[Poller] Job ${jobId} skipped — total $${total} below minimum $${minJobValue}`);
     return;
   }
 
@@ -148,7 +174,23 @@ async function processJob(job, token, results) {
   );
 
   if (referredByField) {
-    await matchReferralByCode(referredByField.value, customer, customerId, jobId, total, results);
+    // Pull invoice line items so we can apply the membership-only flat
+    // rule. Falls back to job total if the invoice can't be fetched.
+    const invoice = await getInvoiceForJob(token, jobId);
+    const invoiceTotal = invoice?.total || total || 0;
+    const lineItems = invoice?.items || [];
+
+    const payout = calculatePayout({ invoiceTotal, lineItems, settings: payoutSettings });
+
+    await matchReferralByCode(
+      referredByField.value,
+      customer,
+      customerId,
+      jobId,
+      invoiceTotal,
+      payout,
+      results
+    );
   }
 
   // ── Check if referral code already exists ──────────────────
@@ -235,7 +277,7 @@ async function processJob(job, token, results) {
 }
 
 // ── Step 6: Match "Referred by Code" back to referrer ────────
-async function matchReferralByCode(referredByCode, referredCustomer, stCustomerId, jobId, jobTotal, results) {
+async function matchReferralByCode(referredByCode, referredCustomer, stCustomerId, jobId, jobTotal, payout, results) {
   const code = referredByCode.trim().toUpperCase();
   console.log(`[Poller] Job ${jobId} has "Referred by Code": ${code} — matching to referrer`);
 
@@ -267,13 +309,16 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
       await supabase
         .from('referrals')
         .update({
-          status: 'completed',
-          referred_name: referredName,
+          status:             'completed',
+          referred_name:      referredName,
+          referred_job_id:    String(jobId),
           referred_job_value: jobTotal,
-          updated_at: new Date().toISOString(),
+          reward_amount:      payout.amount,
+          tier_id:            null,
+          updated_at:         new Date().toISOString(),
         })
         .eq('id', existingReferral.id);
-      console.log(`[Poller] Referral ${existingReferral.id} upgraded to completed`);
+      console.log(`[Poller] Referral ${existingReferral.id} upgraded to completed | Payout: $${payout.amount} (${payout.rule})`);
       results.referralsMatched++;
     } else {
       console.log(`[Poller] Referral ${existingReferral.id} already in status: ${existingReferral.status}`);
@@ -288,7 +333,9 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
       referrer_id:        referrer.id,
       referred_name:      referredName,
       referred_st_id:     String(stCustomerId),
+      referred_job_id:    String(jobId),
       referred_job_value: jobTotal,
+      reward_amount:      payout.amount,
       status:             'completed',
     })
     .select()
@@ -309,7 +356,7 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
       .eq('id', referrer.id);
   });
 
-  console.log(`[Poller] New referral created: ${referredName} → ${referrer.name} (code: ${code}), status: completed`);
+  console.log(`[Poller] New referral created: ${referredName} → ${referrer.name} (code: ${code}), invoice: $${jobTotal}, payout: $${payout.amount} (${payout.rule})`);
   results.referralsMatched++;
 
   // Log the event
@@ -317,7 +364,16 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
     st_job_id:      String(jobId),
     st_customer_id: String(stCustomerId),
     event_type:     'referral.matched',
-    payload:        { referredByCode: code, referrerId: referrer.id, referredName, jobTotal },
+    payload:        {
+      referredByCode: code,
+      referrerId:     referrer.id,
+      referredName,
+      jobTotal,
+      payoutAmount:   payout.amount,
+      payoutRule:     payout.rule,
+      hasMembership:  payout.hasMembership,
+      membershipOnly: payout.membershipOnly,
+    },
     processed:      true,
   });
 }
