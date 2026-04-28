@@ -277,8 +277,6 @@ const ALLOWED_SETTINGS = new Set([
   'new_customer_discount',
   'payout_percentage',
   'payout_cap',
-  'membership_flat',
-  'membership_item_codes',
 ]);
 
 const NUMERIC_SETTINGS = {
@@ -286,7 +284,6 @@ const NUMERIC_SETTINGS = {
   new_customer_discount: { min: 0 },
   payout_percentage:     { min: 0, max: 100 },
   payout_cap:            { min: 0 },
-  membership_flat:       { min: 0 },
 };
 
 router.post('/api/settings', requireSuperAdmin, async (req, res) => {

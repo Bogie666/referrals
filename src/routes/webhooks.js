@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../db');
 const { generateSlug, buildReferralLink, generateReferralCode } = require('../utils/slugs');
-const { calculatePayout, extractLineItems } = require('../utils/payout');
+const { calculatePayout } = require('../utils/payout');
 const { sendReferralInvite } = require('../services/chiirp');
 
 // ──────────────────────────────────────────────────────────────
@@ -59,7 +59,6 @@ async function handleJobCompleted(payload) {
     // Load payout settings
     const settings = await getPayoutSettings();
     const minJobValue = settings.min_job_value || '150';
-    const lineItems = extractLineItems(payload);
 
     // ── Step 1: Upsert customer ──
     let customer = await getOrCreateCustomer({
@@ -106,9 +105,8 @@ async function handleJobCompleted(payload) {
         return;
       }
 
-      const { amount: payoutAmount, rule, hasMembership, membershipOnly } = calculatePayout({
+      const { amount: payoutAmount, rule } = calculatePayout({
         invoiceTotal: jobTotal,
-        lineItems,
         settings,
       });
 
@@ -124,7 +122,7 @@ async function handleJobCompleted(payload) {
         .eq('id', referral.id);
 
       const referrer = referral.referrer;
-      console.log(`[Referral] Qualified — ${referrer.name} referred ${referral.referred_name || 'a new customer'} | Invoice: $${jobTotal} | Membership: ${hasMembership ? (membershipOnly ? 'only' : 'yes') : 'no'} | Payout: $${payoutAmount} (${rule}) | Awaiting payout`);
+      console.log(`[Referral] Qualified — ${referrer.name} referred ${referral.referred_name || 'a new customer'} | Invoice: $${jobTotal} | Payout: $${payoutAmount} (${rule}) | Awaiting payout`);
     }
 
     // Mark job event as processed
@@ -236,8 +234,6 @@ async function getPayoutSettings() {
     'min_job_value',
     'payout_percentage',
     'payout_cap',
-    'membership_flat',
-    'membership_item_codes',
   ];
   const { data } = await supabase
     .from('system_settings')

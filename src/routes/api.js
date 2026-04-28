@@ -7,7 +7,7 @@ async function getPortalPayoutInfo() {
   const { data } = await supabase
     .from('system_settings')
     .select('key, value')
-    .in('key', ['payout_percentage', 'payout_cap', 'membership_flat', 'new_customer_discount']);
+    .in('key', ['payout_percentage', 'payout_cap', 'new_customer_discount']);
   const map = {};
   (data || []).forEach(row => { map[row.key] = row.value; });
   const num = (v, fallback) => {
@@ -17,7 +17,6 @@ async function getPortalPayoutInfo() {
   return {
     payoutPercentage: num(map.payout_percentage, PAYOUT_DEFAULTS.payout_percentage),
     payoutCap:        num(map.payout_cap, PAYOUT_DEFAULTS.payout_cap),
-    membershipFlat:   num(map.membership_flat, PAYOUT_DEFAULTS.membership_flat),
     discountAmount:   num(map.new_customer_discount, parseInt(process.env.NEW_CUSTOMER_DISCOUNT || '50', 10)),
   };
 }
@@ -51,7 +50,6 @@ router.get('/referral/:slugOrCode', async (req, res) => {
     discount: payoutInfo.discountAmount,
     payoutPercentage: payoutInfo.payoutPercentage,
     payoutCap: payoutInfo.payoutCap,
-    membershipFlat: payoutInfo.membershipFlat,
   });
 });
 

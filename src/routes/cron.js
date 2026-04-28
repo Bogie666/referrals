@@ -23,7 +23,6 @@ const {
   getCompletedJobs,
   getCustomer,
   getCustomerContacts,
-  getInvoiceForJob,
   writeReferralCodeToCustomer,
 } = require('../services/servicetitan');
 const { calculatePayout } = require('../utils/payout');
@@ -37,8 +36,6 @@ const PAYOUT_SETTING_KEYS = [
   'min_job_value',
   'payout_percentage',
   'payout_cap',
-  'membership_flat',
-  'membership_item_codes',
 ];
 
 async function loadPayoutSettings() {
@@ -174,13 +171,8 @@ async function processJob(job, token, payoutSettings, results) {
   );
 
   if (referredByField) {
-    // Pull invoice line items so we can apply the membership-only flat
-    // rule. Falls back to job total if the invoice can't be fetched.
-    const invoice = await getInvoiceForJob(token, jobId);
-    const invoiceTotal = invoice?.total || total || 0;
-    const lineItems = invoice?.items || [];
-
-    const payout = calculatePayout({ invoiceTotal, lineItems, settings: payoutSettings });
+    const invoiceTotal = total || 0;
+    const payout = calculatePayout({ invoiceTotal, settings: payoutSettings });
 
     await matchReferralByCode(
       referredByField.value,
@@ -371,8 +363,6 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
       jobTotal,
       payoutAmount:   payout.amount,
       payoutRule:     payout.rule,
-      hasMembership:  payout.hasMembership,
-      membershipOnly: payout.membershipOnly,
     },
     processed:      true,
   });

@@ -31,10 +31,9 @@ define('LEX_PERKS_URL',  'https://lexperks.com');
 // Default payout structure — overridden by API response when available.
 // (Edit live values in the admin dashboard at /admin/settings; these are
 // just fallbacks for when the API is unreachable.)
-define('LEX_PAYOUT_PCT',     5);
-define('LEX_PAYOUT_CAP',     250);
-define('LEX_MEMBERSHIP_FLAT', 25);
-define('LEX_DISCOUNT',       50);
+define('LEX_PAYOUT_PCT', 5);
+define('LEX_PAYOUT_CAP', 250);
+define('LEX_DISCOUNT',   50);
 
 // ── Register both shortcodes ──────────────────────────────────
 add_shortcode('lex_referral',        'lex_referral_shortcode');
@@ -75,27 +74,19 @@ function lex_referral_shortcode() {
       <div id="lex-ref-card" style="display:none;">
 
         <div class="lex-ref-header">
-          <h1 id="lex-ref-headline">Refer a Friend, Earn Rewards!</h1>
+          <h1 id="lex-ref-headline">Welcome to LEX</h1>
           <p id="lex-ref-subline"></p>
         </div>
 
-        <div class="lex-ref-rewards">
+        <div class="lex-ref-rewards lex-ref-rewards-single">
           <div class="lex-ref-reward-box">
             <div class="lex-ref-reward-amount" id="lex-discount-amount">$<?php echo LEX_DISCOUNT; ?></div>
             <div class="lex-ref-reward-label">OFF your first service</div>
           </div>
-          <div class="lex-ref-divider">+</div>
-          <div class="lex-ref-reward-box lex-ref-secondary">
-            <div class="lex-ref-reward-amount" id="lex-reward-amount"><?php echo LEX_PAYOUT_PCT; ?>%</div>
-            <div class="lex-ref-reward-label">
-              of your invoice (up to $<span id="lex-reward-cap"><?php echo LEX_PAYOUT_CAP; ?></span>)
-              goes to <span id="lex-referrer-name">your friend</span>
-            </div>
-          </div>
         </div>
 
         <p style="text-align:center; font-size:15px; color:#64748b; margin:0 0 28px;">
-          Schedule your first HVAC, plumbing, or electrical service to unlock both rewards.
+          Schedule your first HVAC, plumbing, or electrical service to claim your discount.
         </p>
 
         <div style="text-align:center; margin-bottom:16px;">
@@ -112,8 +103,8 @@ function lex_referral_shortcode() {
 
 
         <p style="text-align:center; font-size:12px; color:#94a3b8; margin-top:28px; line-height:1.5;">
-          Reward paid after friend's first completed qualifying service.
-          One reward per household. LEX Air Conditioning — Serving DFW since 2004.
+          Discount applied to your first qualifying service over $350.
+          One discount per household. LEX Air Conditioning — Serving DFW since 2004.
         </p>
 
       </div><!-- /lex-ref-card -->
@@ -151,6 +142,9 @@ function lex_referral_shortcode() {
         padding: 28px 24px;
         margin: 0 0 24px;
       }
+      .lex-ref-rewards-single { padding: 36px 24px; }
+      .lex-ref-rewards-single .lex-ref-reward-amount { font-size: 64px; }
+      .lex-ref-rewards-single .lex-ref-reward-label  { font-size: 15px; }
       .lex-ref-reward-box { text-align: center; flex: 1; }
       .lex-ref-reward-amount {
         font-size: 48px;
@@ -158,9 +152,7 @@ function lex_referral_shortcode() {
         color: #1d3a6e;
         line-height: 1;
       }
-      .lex-ref-secondary .lex-ref-reward-amount { color: #10b981; }
       .lex-ref-reward-label { font-size: 13px; color: #64748b; margin-top: 6px; }
-      .lex-ref-divider { font-size: 28px; color: #cbd5e1; font-weight: 300; }
       .lex-ref-btn-primary {
         display: inline-block;
         background: #e85c24;
@@ -212,7 +204,7 @@ function lex_referral_shortcode() {
       @media (max-width: 480px) {
         .lex-ref-rewards { flex-direction: column; gap: 12px; }
         .lex-ref-reward-amount { font-size: 40px; }
-        .lex-ref-divider { display: none; }
+        .lex-ref-rewards-single .lex-ref-reward-amount { font-size: 56px; }
       }
     </style>
 
@@ -221,8 +213,6 @@ function lex_referral_shortcode() {
       const params   = new URLSearchParams(window.location.search);
       const slug     = params.get('r');
       const API      = '<?php echo LEX_API_URL; ?>';
-      const PCT      = <?php echo LEX_PAYOUT_PCT; ?>;
-      const CAP      = <?php echo LEX_PAYOUT_CAP; ?>;
       const DISCOUNT = <?php echo LEX_DISCOUNT; ?>;
 
       // Track the click
@@ -234,14 +224,18 @@ function lex_referral_shortcode() {
         }).catch(() => {});
       }
 
+      function buildSubline(discount) {
+        return 'Enjoy $' + discount + ' off your first service with us, whether it\'s HVAC, plumbing, or electrical. ' +
+               'Over 2,200 five-star reviews, serving DFW since 2004.';
+      }
+
       async function init() {
         // No slug — show generic page
         if (!slug) {
           document.getElementById('lex-ref-loading').style.display = 'none';
-          document.getElementById('lex-ref-headline').textContent = 'Refer a Friend, Earn ' + PCT + '% (up to $' + CAP + ')!';
-          document.getElementById('lex-ref-subline').textContent =
-            'Share LEX with someone who needs HVAC, plumbing, or electrical work in DFW.';
-          document.getElementById('lex-ref-card').style.display = 'block';
+          document.getElementById('lex-ref-headline').textContent  = 'Welcome to LEX';
+          document.getElementById('lex-ref-subline').textContent   = buildSubline(DISCOUNT);
+          document.getElementById('lex-ref-card').style.display    = 'block';
           return;
         }
 
@@ -252,18 +246,11 @@ function lex_referral_shortcode() {
           if (!res.ok || data.error) throw new Error(data.error || 'not found');
 
           const firstName = data.referrerFirstName || data.name || 'A friend';
-          const discount  = data.discount         != null ? data.discount         : DISCOUNT;
-          const pct       = data.payoutPercentage != null ? data.payoutPercentage : PCT;
-          const cap       = data.payoutCap        != null ? data.payoutCap        : CAP;
+          const discount  = data.discount != null ? data.discount : DISCOUNT;
 
-          document.getElementById('lex-ref-headline').textContent =
-            firstName + ' wants to save you money on home services!';
-          document.getElementById('lex-ref-subline').textContent =
-            'Get $' + discount + ' off your first LEX service through their referral.';
-          document.getElementById('lex-referrer-name').textContent  = firstName;
+          document.getElementById('lex-ref-headline').textContent   = firstName + ' thought you\'d like LEX';
+          document.getElementById('lex-ref-subline').textContent    = buildSubline(discount);
           document.getElementById('lex-discount-amount').textContent = '$' + discount;
-          document.getElementById('lex-reward-amount').textContent   = pct + '%';
-          document.getElementById('lex-reward-cap').textContent      = cap;
 
           // Share tools removed — link exists for reference only
           const link = data.referralLink || data.referral_link || '';
@@ -399,10 +386,10 @@ function lex_referral_portal_shortcode() {
         <div class="lex-portal-card">
           <h3 class="lex-portal-section-title">Your Referral Link</h3>
           <p style="font-size:14px; color:var(--lp-muted); margin-bottom:16px;">
-            Share this with friends and family. When they complete their first service, you earn
-            <strong id="lex-reward-amount-display"><?php echo LEX_PAYOUT_PCT; ?>% of their invoice (up to $<?php echo LEX_PAYOUT_CAP; ?>)</strong>
-            — or a flat <strong id="lex-membership-flat-display">$<?php echo LEX_MEMBERSHIP_FLAT; ?></strong> if they only purchase a membership.
-            They save <strong id="lex-discount-amount-display">$<?php echo LEX_DISCOUNT; ?></strong>.
+            Know someone who needs HVAC, plumbing, or electrical help? Share your code.
+            They'll save <strong id="lex-discount-amount-display">$<?php echo LEX_DISCOUNT; ?></strong> on their first service,
+            and you'll earn <strong id="lex-reward-amount-display"><?php echo LEX_PAYOUT_PCT; ?>%</strong>
+            of what they spend back (up to $<span id="lex-reward-cap-display"><?php echo LEX_PAYOUT_CAP; ?></span>).
           </p>
 
           <!-- Your short code -->
@@ -459,8 +446,8 @@ function lex_referral_portal_shortcode() {
               <div class="lex-portal-step-num">3</div>
               <div>
                 <strong>You both get rewarded</strong>
-                <p>You earn <span id="lex-step-reward"><?php echo LEX_PAYOUT_PCT; ?>% of their invoice (up to $<?php echo LEX_PAYOUT_CAP; ?>)</span>
-                   as a gift card — or a flat <span id="lex-step-membership">$<?php echo LEX_MEMBERSHIP_FLAT; ?></span> if they only purchase a membership.
+                <p>You earn <span id="lex-step-reward"><?php echo LEX_PAYOUT_PCT; ?>%</span>
+                   of their invoice back as a gift card (up to $<span id="lex-step-cap"><?php echo LEX_PAYOUT_CAP; ?></span>).
                    Your friend saves <span id="lex-step-discount">$<?php echo LEX_DISCOUNT; ?></span> on their service.</p>
               </div>
             </div>
@@ -612,11 +599,10 @@ function lex_referral_portal_shortcode() {
 
     <script>
     (function() {
-      const API              = '<?php echo LEX_API_URL; ?>';
-      const PAYOUT_PCT       = <?php echo LEX_PAYOUT_PCT; ?>;
-      const PAYOUT_CAP       = <?php echo LEX_PAYOUT_CAP; ?>;
-      const MEMBERSHIP_FLAT  = <?php echo LEX_MEMBERSHIP_FLAT; ?>;
-      const DISCOUNT         = <?php echo LEX_DISCOUNT; ?>;
+      const API        = '<?php echo LEX_API_URL; ?>';
+      const PAYOUT_PCT = <?php echo LEX_PAYOUT_PCT; ?>;
+      const PAYOUT_CAP = <?php echo LEX_PAYOUT_CAP; ?>;
+      const DISCOUNT   = <?php echo LEX_DISCOUNT; ?>;
       let currentData = null;
 
       // ── Screen management ──
@@ -742,18 +728,15 @@ function lex_referral_portal_shortcode() {
         const pending = (data.referrals || []).filter(r => ['pending','booked','completed'].includes(r.status)).length;
         document.getElementById('lex-portal-pending-count').textContent = pending;
 
-        const pct       = data.payoutPercentage != null ? data.payoutPercentage : PAYOUT_PCT;
-        const cap       = data.payoutCap        != null ? data.payoutCap        : PAYOUT_CAP;
-        const flat      = data.membershipFlat   != null ? data.membershipFlat   : MEMBERSHIP_FLAT;
-        const discount  = data.discountAmount   != null ? data.discountAmount   : DISCOUNT;
-        const rewardLbl = pct + '% of their invoice (up to $' + cap + ')';
-        const flatLbl   = '$' + flat;
-        document.getElementById('lex-reward-amount-display').textContent     = rewardLbl;
-        document.getElementById('lex-membership-flat-display').textContent   = flatLbl;
-        document.getElementById('lex-discount-amount-display').textContent   = '$' + discount;
-        document.getElementById('lex-step-reward').textContent               = rewardLbl;
-        document.getElementById('lex-step-membership').textContent           = flatLbl;
-        document.getElementById('lex-step-discount').textContent             = '$' + discount;
+        const pct      = data.payoutPercentage != null ? data.payoutPercentage : PAYOUT_PCT;
+        const cap      = data.payoutCap        != null ? data.payoutCap        : PAYOUT_CAP;
+        const discount = data.discountAmount   != null ? data.discountAmount   : DISCOUNT;
+        document.getElementById('lex-reward-amount-display').textContent  = pct + '%';
+        document.getElementById('lex-reward-cap-display').textContent     = cap;
+        document.getElementById('lex-discount-amount-display').textContent = '$' + discount;
+        document.getElementById('lex-step-reward').textContent            = pct + '%';
+        document.getElementById('lex-step-cap').textContent               = cap;
+        document.getElementById('lex-step-discount').textContent          = '$' + discount;
 
         // Referral link
         document.getElementById('lex-portal-link-input').value = data.referralLink;

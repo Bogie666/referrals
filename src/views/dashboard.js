@@ -1240,8 +1240,6 @@ function renderActivityTab(recentActivity) {
 function renderSettingsTab(settings, adminUsers) {
   const pct = settings.payout_percentage || '5';
   const cap = settings.payout_cap || '250';
-  const flat = settings.membership_flat || '25';
-  const codes = settings.membership_item_codes || '';
   return `
     <div class="page-header">
       <h2>Settings</h2>
@@ -1253,8 +1251,6 @@ function renderSettingsTab(settings, adminUsers) {
       <h3>Payout Rules</h3>
       <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
         Referrer earns <strong>${pct}%</strong> of the referred customer's invoice, capped at <strong>$${cap}</strong>.
-        If the invoice contains <em>only</em> a membership purchase, the referrer earns a flat <strong>$${flat}</strong> instead.
-        These rules are not combinable.
       </p>
       <form onsubmit="saveSettings(event)">
         <div class="form-row">
@@ -1265,19 +1261,6 @@ function renderSettingsTab(settings, adminUsers) {
           <div class="form-group">
             <label>Payout Cap ($)</label>
             <input type="number" id="setting-payout-cap" value="${cap}" step="1" min="0" />
-          </div>
-          <div class="form-group">
-            <label>Membership-Only Flat Payout ($)</label>
-            <input type="number" id="setting-membership-flat" value="${flat}" step="1" min="0" />
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group" style="flex:1 1 100%;">
-            <label>Membership Item Codes / Names</label>
-            <input type="text" id="setting-membership-item-codes" value="${codes.replace(/"/g, '&quot;')}" placeholder="e.g. MEMBERSHIP, MEMB-ANNUAL, COMFORT-CLUB" />
-            <div style="font-size:12px; color:var(--muted); margin-top:4px;">
-              Comma-separated. Match is case-insensitive against the ServiceTitan invoice line item code or name.
-            </div>
           </div>
         </div>
         <div class="form-row">
@@ -1387,8 +1370,6 @@ function renderSettingsTab(settings, adminUsers) {
       const settings = {
         payout_percentage:     document.getElementById('setting-payout-percentage').value,
         payout_cap:            document.getElementById('setting-payout-cap').value,
-        membership_flat:       document.getElementById('setting-membership-flat').value,
-        membership_item_codes: document.getElementById('setting-membership-item-codes').value,
         min_job_value:         document.getElementById('setting-min-job-value').value,
         new_customer_discount: document.getElementById('setting-new-customer-discount').value,
       };
@@ -1680,10 +1661,10 @@ function renderPortalTab() {
             <div class="lex-portal-card">
               <h3 class="lex-portal-section-title">Your Referral Link</h3>
               <p style="font-size:14px; color:var(--muted); margin-bottom:16px;">
-                Share this link with friends and family. When they complete their first service, you earn
-                <strong id="lex-reward-amount-display">5% of their invoice (up to $250)</strong>
-                — or a flat <strong id="lex-membership-flat-display">$25</strong> if they only buy a membership.
-                They save <strong id="lex-discount-amount-display">$50</strong>.
+                Know someone who needs HVAC, plumbing, or electrical help? Share your code.
+                They'll save <strong id="lex-discount-amount-display">$50</strong> on their first service,
+                and you'll earn <strong id="lex-reward-amount-display">5%</strong>
+                of what they spend back (up to $<span id="lex-reward-cap-display">250</span>).
               </p>
               <div class="lex-portal-link-row">
                 <input type="text" id="lex-portal-link-input" readonly />
@@ -1724,9 +1705,9 @@ function renderPortalTab() {
                   <div class="lex-portal-step-num">3</div>
                   <div>
                     <strong>You both get rewarded</strong>
-                    <p>You earn <span id="lex-step-reward">5% of their invoice (up to $250)</span>
-                       as a gift card — or a flat <span id="lex-step-membership">$25</span> if they
-                       only purchase a membership. They save <span id="lex-step-discount">$50</span> on their service.</p>
+                    <p>You earn <span id="lex-step-reward">5%</span> of their invoice back as a gift card
+                       (up to $<span id="lex-step-cap">250</span>).
+                       Your friend saves <span id="lex-step-discount">$50</span> on their service.</p>
                   </div>
                 </div>
               </div>
@@ -2040,16 +2021,13 @@ function renderPortalTab() {
 
         var pct = data.payoutPercentage != null ? data.payoutPercentage : 5;
         var cap = data.payoutCap != null ? data.payoutCap : 250;
-        var membershipFlat = data.membershipFlat != null ? data.membershipFlat : 25;
         var discount = data.discountAmount || 50;
-        var rewardLabel = pct + '% of their invoice (up to $' + cap + ')';
-        var membershipLabel = '$' + membershipFlat;
-        document.getElementById('lex-reward-amount-display').textContent = rewardLabel;
-        document.getElementById('lex-membership-flat-display').textContent = membershipLabel;
+        document.getElementById('lex-reward-amount-display').textContent   = pct + '%';
+        document.getElementById('lex-reward-cap-display').textContent      = cap;
         document.getElementById('lex-discount-amount-display').textContent = '$' + discount;
-        document.getElementById('lex-step-reward').textContent = rewardLabel;
-        document.getElementById('lex-step-membership').textContent = membershipLabel;
-        document.getElementById('lex-step-discount').textContent = '$' + discount;
+        document.getElementById('lex-step-reward').textContent             = pct + '%';
+        document.getElementById('lex-step-cap').textContent                = cap;
+        document.getElementById('lex-step-discount').textContent           = '$' + discount;
 
         var linkInput = document.getElementById('lex-portal-link-input');
         linkInput.value = data.referralLink;
