@@ -89,7 +89,7 @@ function renderLogin(error = '') {
 </html>`;
 }
 
-function renderDashboard({ stats, referrals, topReferrers, recentActivity, monthlyTrend, tiers, settings, adminUsers, activeTab = 'overview' }) {
+function renderDashboard({ stats, referrals, topReferrers, recentActivity, monthlyTrend, settings, adminUsers, activeTab = 'overview' }) {
   const navItems = [
     { id: 'overview',   label: 'Overview',       href: '/admin' },
     { id: 'referrals',  label: 'Referrals',      href: '/admin/referrals' },
@@ -627,7 +627,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
   ${activeTab === 'customers' ? renderReferrersTab(topReferrers) : ''}
   ${activeTab === 'activity'  ? renderActivityTab(recentActivity) : ''}
   ${activeTab === 'portal'    ? renderPortalTab() : ''}
-  ${activeTab === 'settings'  ? renderSettingsTab(tiers || [], settings || {}, adminUsers || []) : ''}
+  ${activeTab === 'settings'  ? renderSettingsTab(settings || {}, adminUsers || []) : ''}
 
 </main>
 
@@ -722,7 +722,7 @@ if (donutCtx) {
 function openPayoutModal(referralId, referrerName, amount) {
   document.getElementById('payout-referral-id').value = referralId;
   document.getElementById('payout-modal-info').textContent = 'Paying ' + referrerName + ' for this referral';
-  document.getElementById('payout-amount').value = amount || 75;
+  document.getElementById('payout-amount').value = amount || 0;
   document.getElementById('payout-modal').classList.add('active');
 }
 
@@ -1070,7 +1070,7 @@ function renderReferralsTab(referrals) {
                   ${r.status === 'rewarded'
                     ? `<span style="color:var(--green);font-weight:600;">${formatCurrency(r.reward_amount)} paid</span>`
                     : r.status === 'completed'
-                      ? `<span style="color:var(--muted);">${formatCurrency(r.reward_amount)} (tier)</span>`
+                      ? `<span style="color:var(--muted);">${formatCurrency(r.reward_amount)} pending</span>`
                       : '—'
                   }
                 </td>
@@ -1078,7 +1078,7 @@ function renderReferralsTab(referrals) {
                 <td style="white-space:nowrap;">
                   ${r.status === 'completed' ? `
                     <button
-                      onclick="openPayoutModal('${r.id}', '${(r.referrer?.name || '').replace(/'/g, "\\'")}', ${r.reward_amount || 75})"
+                      onclick="openPayoutModal('${r.id}', '${(r.referrer?.name || '').replace(/'/g, "\\'")}', ${r.reward_amount || 0})"
                       style="
                         padding: 6px 14px;
                         background: var(--green);
@@ -1237,17 +1237,49 @@ function renderActivityTab(recentActivity) {
   `;
 }
 
-function renderSettingsTab(tiers, settings, adminUsers) {
+function renderSettingsTab(settings, adminUsers) {
+  const pct = settings.payout_percentage || '5';
+  const cap = settings.payout_cap || '250';
+  const flat = settings.membership_flat || '25';
+  const codes = settings.membership_item_codes || '';
   return `
     <div class="page-header">
       <h2>Settings</h2>
       <p>Configure referral program parameters</p>
     </div>
 
-    <!-- General Settings -->
+    <!-- Payout Rules -->
     <div class="settings-card">
-      <h3>General</h3>
+      <h3>Payout Rules</h3>
+      <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+        Referrer earns <strong>${pct}%</strong> of the referred customer's invoice, capped at <strong>$${cap}</strong>.
+        If the invoice contains <em>only</em> a membership purchase, the referrer earns a flat <strong>$${flat}</strong> instead.
+        These rules are not combinable.
+      </p>
       <form onsubmit="saveSettings(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Payout Percentage (%)</label>
+            <input type="number" id="setting-payout-percentage" value="${pct}" step="0.1" min="0" max="100" />
+          </div>
+          <div class="form-group">
+            <label>Payout Cap ($)</label>
+            <input type="number" id="setting-payout-cap" value="${cap}" step="1" min="0" />
+          </div>
+          <div class="form-group">
+            <label>Membership-Only Flat Payout ($)</label>
+            <input type="number" id="setting-membership-flat" value="${flat}" step="1" min="0" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1 1 100%;">
+            <label>Membership Item Codes / Names</label>
+            <input type="text" id="setting-membership-item-codes" value="${codes.replace(/"/g, '&quot;')}" placeholder="e.g. MEMBERSHIP, MEMB-ANNUAL, COMFORT-CLUB" />
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">
+              Comma-separated. Match is case-insensitive against the ServiceTitan invoice line item code or name.
+            </div>
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label>Min Job Value ($)</label>
@@ -1260,72 +1292,6 @@ function renderSettingsTab(tiers, settings, adminUsers) {
         </div>
         <button type="submit" class="btn-save" id="settings-save-btn">Save Settings</button>
       </form>
-    </div>
-
-    <!-- Reward Tiers -->
-    <div class="settings-card">
-      <h3>Reward Tiers</h3>
-      <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
-        Reward amount is based on the referred job's value. When a referral completes, the system picks the tier matching the job total.
-      </p>
-      <table style="margin-bottom:20px;">
-        <thead><tr>
-          <th>Tier</th>
-          <th>Min Job Value</th>
-          <th>Max Job Value</th>
-          <th>Reward</th>
-          <th>Active</th>
-          <th></th>
-        </tr></thead>
-        <tbody>
-          ${tiers.map(t => `
-            <tr id="tier-${t.id}">
-              <td><strong>${t.label}</strong></td>
-              <td>${formatCurrency(t.min_job_value)}</td>
-              <td>${t.max_job_value !== null ? formatCurrency(t.max_job_value) : 'Unlimited'}</td>
-              <td style="font-weight:600;color:var(--green);">${formatCurrency(t.payout_amount)}</td>
-              <td>
-                <span style="color:${t.active ? 'var(--green)' : '#ef4444'};font-weight:600;">
-                  ${t.active ? 'Yes' : 'No'}
-                </span>
-              </td>
-              <td>
-                <button class="btn-sm" style="background:var(--navy);color:#fff;margin-right:4px;"
-                  onclick="editTier('${t.id}', '${t.label}', ${t.min_job_value}, ${t.max_job_value === null ? 'null' : t.max_job_value}, ${t.payout_amount}, ${t.active})">
-                  Edit
-                </button>
-                <button class="btn-danger" onclick="toggleTier('${t.id}', ${!t.active})">
-                  ${t.active ? 'Disable' : 'Enable'}
-                </button>
-              </td>
-            </tr>
-          `).join('') || '<tr><td colspan="6"><div class="empty-state"><p>No tiers configured</p></div></td></tr>'}
-        </tbody>
-      </table>
-
-      <!-- Add tier form -->
-      <div style="border-top:1px solid var(--border); padding-top:16px;">
-        <h4 style="font-size:14px; margin-bottom:12px;">Add New Tier</h4>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Label</label>
-            <input type="text" id="new-tier-label" placeholder="e.g. Diamond" />
-          </div>
-          <div class="form-group">
-            <label>Min Job Value ($)</label>
-            <input type="number" id="new-tier-min" min="0" step="0.01" placeholder="75" />
-          </div>
-          <div class="form-group">
-            <label>Max Job Value ($)</label>
-            <input type="number" id="new-tier-max" step="0.01" placeholder="Leave blank for unlimited" />
-          </div>
-          <div class="form-group">
-            <label>Payout ($)</label>
-            <input type="number" id="new-tier-payout" step="0.01" min="1" placeholder="75" />
-          </div>
-        </div>
-        <button class="btn-save" onclick="addTier()">Add Tier</button>
-      </div>
     </div>
 
     <!-- User Management -->
@@ -1419,7 +1385,11 @@ function renderSettingsTab(tiers, settings, adminUsers) {
       btn.disabled = true;
 
       const settings = {
-        min_job_value: document.getElementById('setting-min-job-value').value,
+        payout_percentage:     document.getElementById('setting-payout-percentage').value,
+        payout_cap:            document.getElementById('setting-payout-cap').value,
+        membership_flat:       document.getElementById('setting-membership-flat').value,
+        membership_item_codes: document.getElementById('setting-membership-item-codes').value,
+        min_job_value:         document.getElementById('setting-min-job-value').value,
         new_customer_discount: document.getElementById('setting-new-customer-discount').value,
       };
 
@@ -1442,69 +1412,6 @@ function renderSettingsTab(tiers, settings, adminUsers) {
         alert('Request failed: ' + err.message);
         btn.textContent = 'Save Settings'; btn.disabled = false;
       }
-    }
-
-    async function addTier() {
-      const label = document.getElementById('new-tier-label').value.trim();
-      const min_job_value = document.getElementById('new-tier-min').value;
-      const max_job_value = document.getElementById('new-tier-max').value || null;
-      const payout_amount = document.getElementById('new-tier-payout').value;
-
-      if (!label || !min_job_value || !payout_amount) {
-        alert('Please fill in label, min job value, and reward amount.');
-        return;
-      }
-
-      const res = await fetch('/admin/api/tiers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, min_job_value, max_job_value, payout_amount }),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        location.reload();
-      } else {
-        alert('Error: ' + (data.error || 'Unknown'));
-      }
-    }
-
-    function editTier(id, label, min, max, payout, active) {
-      var newLabel = prompt('Tier label:', label);
-      if (newLabel === null) return;
-      var newMin = prompt('Min job value ($):', min);
-      if (newMin === null) return;
-      var newMax = prompt('Max job value ($ — blank = unlimited):', max === null ? '' : max);
-      if (newMax === null) return;
-      var newPayout = prompt('Reward amount ($):', payout);
-      if (newPayout === null) return;
-
-      fetch('/admin/api/tiers/' + id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          label: newLabel,
-          min_job_value: parseFloat(newMin),
-          max_job_value: newMax ? parseFloat(newMax) : null,
-          payout_amount: parseFloat(newPayout),
-          active: active,
-        }),
-      }).then(function(res) { return res.json(); })
-        .then(function(data) {
-          if (data.success) location.reload();
-          else alert('Error: ' + (data.error || 'Unknown'));
-        });
-    }
-
-    async function toggleTier(id, newActive) {
-      const res = await fetch('/admin/api/tiers/' + id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: newActive }),
-      });
-      const data = await res.json();
-      if (data.success) location.reload();
-      else alert('Error: ' + (data.error || 'Unknown'));
     }
 
     async function addUser() {
@@ -1773,9 +1680,10 @@ function renderPortalTab() {
             <div class="lex-portal-card">
               <h3 class="lex-portal-section-title">Your Referral Link</h3>
               <p style="font-size:14px; color:var(--muted); margin-bottom:16px;">
-                Share this link with friends and family. When they complete their first service,
-                you get a <strong id="lex-reward-amount-display">$75</strong> gift card and they save
-                <strong id="lex-discount-amount-display">$50</strong>.
+                Share this link with friends and family. When they complete their first service, you earn
+                <strong id="lex-reward-amount-display">5% of their invoice (up to $250)</strong>
+                — or a flat <strong id="lex-membership-flat-display">$25</strong> if they only buy a membership.
+                They save <strong id="lex-discount-amount-display">$50</strong>.
               </p>
               <div class="lex-portal-link-row">
                 <input type="text" id="lex-portal-link-input" readonly />
@@ -1816,8 +1724,9 @@ function renderPortalTab() {
                   <div class="lex-portal-step-num">3</div>
                   <div>
                     <strong>You both get rewarded</strong>
-                    <p>You receive a <span id="lex-step-reward">$75</span> gift card.
-                       They save <span id="lex-step-discount">$50</span> on their service.</p>
+                    <p>You earn <span id="lex-step-reward">5% of their invoice (up to $250)</span>
+                       as a gift card — or a flat <span id="lex-step-membership">$25</span> if they
+                       only purchase a membership. They save <span id="lex-step-discount">$50</span> on their service.</p>
                   </div>
                 </div>
               </div>
@@ -2129,11 +2038,17 @@ function renderPortalTab() {
         var pending = (data.referrals || []).filter(function(r) { return ['pending','booked','completed'].includes(r.status); }).length;
         document.getElementById('lex-portal-pending-count').textContent = pending;
 
-        var reward = data.rewardAmount || 75;
+        var pct = data.payoutPercentage != null ? data.payoutPercentage : 5;
+        var cap = data.payoutCap != null ? data.payoutCap : 250;
+        var membershipFlat = data.membershipFlat != null ? data.membershipFlat : 25;
         var discount = data.discountAmount || 50;
-        document.getElementById('lex-reward-amount-display').textContent = '$' + reward;
+        var rewardLabel = pct + '% of their invoice (up to $' + cap + ')';
+        var membershipLabel = '$' + membershipFlat;
+        document.getElementById('lex-reward-amount-display').textContent = rewardLabel;
+        document.getElementById('lex-membership-flat-display').textContent = membershipLabel;
         document.getElementById('lex-discount-amount-display').textContent = '$' + discount;
-        document.getElementById('lex-step-reward').textContent = '$' + reward;
+        document.getElementById('lex-step-reward').textContent = rewardLabel;
+        document.getElementById('lex-step-membership').textContent = membershipLabel;
         document.getElementById('lex-step-discount').textContent = '$' + discount;
 
         var linkInput = document.getElementById('lex-portal-link-input');

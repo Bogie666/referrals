@@ -179,17 +179,6 @@ async function getMonthlyTrend() {
 }
 
 /**
- * Get all tiers.
- */
-async function getTiers() {
-  const { data } = await supabase
-    .from('referral_tiers')
-    .select('*')
-    .order('min_job_value', { ascending: true });
-  return data || [];
-}
-
-/**
  * Get all system settings.
  */
 async function getSettings() {
@@ -214,5 +203,5 @@ async function getAdminUsers() {
 
 module.exports = {
   getStats, getReferrals, getPayoutForReferral, getTopReferrers,
-  getRecentActivity, getMonthlyTrend, getTiers, getSettings, getAdminUsers,
+  getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers,
 };

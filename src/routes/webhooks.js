@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../db');
 const { generateSlug, buildReferralLink, generateReferralCode } = require('../utils/slugs');
+const { calculatePayout, extractLineItems } = require('../utils/payout');
 const { sendReferralInvite } = require('../services/chiirp');
 
 // ──────────────────────────────────────────────────────────────
@@ -55,8 +56,10 @@ async function handleJobCompleted(payload) {
       return;
     }
 
-    // Load min job value from settings
-    const minJobValue = await getSetting('min_job_value', '150');
+    // Load payout settings
+    const settings = await getPayoutSettings();
+    const minJobValue = settings.min_job_value || '150';
+    const lineItems = extractLineItems(payload);
 
     // ── Step 1: Upsert customer ──
     let customer = await getOrCreateCustomer({
@@ -103,20 +106,12 @@ async function handleJobCompleted(payload) {
         return;
       }
 
-      // Find matching tier based on job value
-      const { data: tier } = await supabase
-        .from('referral_tiers')
-        .select('*')
-        .eq('active', true)
-        .lte('min_job_value', jobTotal)
-        .or(`max_job_value.gte.${jobTotal},max_job_value.is.null`)
-        .order('min_job_value', { ascending: false })
-        .limit(1)
-        .single();
+      const { amount: payoutAmount, rule, hasMembership, membershipOnly } = calculatePayout({
+        invoiceTotal: jobTotal,
+        lineItems,
+        settings,
+      });
 
-      const payoutAmount = tier ? parseFloat(tier.payout_amount) : 75;
-
-      // Mark as completed with tier info
       await supabase
         .from('referrals')
         .update({
@@ -124,12 +119,12 @@ async function handleJobCompleted(payload) {
           referred_job_id: jobId,
           referred_job_value: jobTotal,
           reward_amount: payoutAmount,
-          tier_id: tier?.id || null,
+          tier_id: null,
         })
         .eq('id', referral.id);
 
       const referrer = referral.referrer;
-      console.log(`[Referral] Qualified — ${referrer.name} referred ${referral.referred_name || 'a new customer'} | Job: $${jobTotal} | Tier: ${tier?.label || 'default'} ($${payoutAmount}) | Awaiting payout`);
+      console.log(`[Referral] Qualified — ${referrer.name} referred ${referral.referred_name || 'a new customer'} | Invoice: $${jobTotal} | Membership: ${hasMembership ? (membershipOnly ? 'only' : 'yes') : 'no'} | Payout: $${payoutAmount} (${rule}) | Awaiting payout`);
     }
 
     // Mark job event as processed
@@ -236,13 +231,21 @@ async function getOrCreateCustomer({ stCustomerId, name, phone, email }) {
   return created;
 }
 
-async function getSetting(key, fallback) {
+async function getPayoutSettings() {
+  const keys = [
+    'min_job_value',
+    'payout_percentage',
+    'payout_cap',
+    'membership_flat',
+    'membership_item_codes',
+  ];
   const { data } = await supabase
     .from('system_settings')
-    .select('value')
-    .eq('key', key)
-    .single();
-  return data?.value || fallback;
+    .select('key, value')
+    .in('key', keys);
+  const out = {};
+  (data || []).forEach(row => { out[row.key] = row.value; });
+  return out;
 }
 
 function normalizePhone(phone) {

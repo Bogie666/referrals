@@ -1,6 +1,26 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../db');
+const { DEFAULTS: PAYOUT_DEFAULTS } = require('../utils/payout');
+
+async function getPortalPayoutInfo() {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('key, value')
+    .in('key', ['payout_percentage', 'payout_cap', 'membership_flat', 'new_customer_discount']);
+  const map = {};
+  (data || []).forEach(row => { map[row.key] = row.value; });
+  const num = (v, fallback) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  return {
+    payoutPercentage: num(map.payout_percentage, PAYOUT_DEFAULTS.payout_percentage),
+    payoutCap:        num(map.payout_cap, PAYOUT_DEFAULTS.payout_cap),
+    membershipFlat:   num(map.membership_flat, PAYOUT_DEFAULTS.membership_flat),
+    discountAmount:   num(map.new_customer_discount, parseInt(process.env.NEW_CUSTOMER_DISCOUNT || '50', 10)),
+  };
+}
 
 // ──────────────────────────────────────────────────────────────
 // GET /api/referral/:slugOrCode
@@ -122,11 +142,14 @@ router.post('/portal/lookup', async (req, res) => {
     .single();
 
   if (existingCustomer?.referral_link) {
-    const { data: referrals } = await supabase
-      .from('referrals')
-      .select('id, referred_name, status, reward_amount, created_at')
-      .eq('referrer_id', existingCustomer.id)
-      .order('created_at', { ascending: false });
+    const [{ data: referrals }, payoutInfo] = await Promise.all([
+      supabase
+        .from('referrals')
+        .select('id, referred_name, status, reward_amount, created_at')
+        .eq('referrer_id', existingCustomer.id)
+        .order('created_at', { ascending: false }),
+      getPortalPayoutInfo(),
+    ]);
 
     return res.json({
       found: true,
@@ -137,8 +160,7 @@ router.post('/portal/lookup', async (req, res) => {
       referralCode: existingCustomer.referral_code,
       totalReferrals: existingCustomer.total_referrals || 0,
       totalRewards: existingCustomer.total_rewards || 0,
-      rewardAmount: parseInt(process.env.REFERRER_REWARD || '75'),
-      discountAmount: parseInt(process.env.NEW_CUSTOMER_DISCOUNT || '50'),
+      ...payoutInfo,
       referrals: referrals || [],
     });
   }
@@ -212,6 +234,7 @@ router.post('/portal/lookup', async (req, res) => {
         .eq('phone', normalized)
         .single();
       if (existing) {
+        const payoutInfo = await getPortalPayoutInfo();
         return res.json({
           found: true,
           hasReferralLink: true,
@@ -221,8 +244,7 @@ router.post('/portal/lookup', async (req, res) => {
           referralCode: existing.referral_code,
           totalReferrals: 0,
           totalRewards: 0,
-          rewardAmount: parseInt(process.env.REFERRER_REWARD || '75'),
-          discountAmount: parseInt(process.env.NEW_CUSTOMER_DISCOUNT || '50'),
+          ...payoutInfo,
           referrals: [],
           isNew: false,
         });
@@ -234,6 +256,7 @@ router.post('/portal/lookup', async (req, res) => {
 
   console.log(`[Portal] New referral link created via ST self-signup: ${contact.name} -> ${slug}`);
 
+  const payoutInfo = await getPortalPayoutInfo();
   return res.json({
     found: true,
     hasReferralLink: true,
@@ -244,8 +267,7 @@ router.post('/portal/lookup', async (req, res) => {
     referralCode: newCustomer.referral_code,
     totalReferrals: 0,
     totalRewards: 0,
-    rewardAmount: parseInt(process.env.REFERRER_REWARD || '75'),
-    discountAmount: parseInt(process.env.NEW_CUSTOMER_DISCOUNT || '50'),
+    ...payoutInfo,
     referrals: [],
   });
 });

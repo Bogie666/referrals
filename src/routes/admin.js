@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAdmin, requireSuperAdmin, createSession, destroySession, authenticateUser, hashPassword } = require('../middleware/adminAuth');
-const { getStats, getReferrals, getTopReferrers, getRecentActivity, getMonthlyTrend, getTiers, getSettings, getAdminUsers } = require('../services/adminData');
+const { getStats, getReferrals, getTopReferrers, getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers } = require('../services/adminData');
 const { renderLogin, renderDashboard } = require('../views/dashboard');
 const { sendRewardNotification } = require('../services/chiirp');
 const supabase = require('../db');
@@ -139,13 +139,12 @@ router.get('/portal', requireAdmin, async (req, res) => {
 // ──────────────────────────────────────────────────────────────
 router.get('/settings', requireAdmin, async (req, res) => {
   try {
-    const [data, tiers, settings, adminUsers] = await Promise.all([
+    const [data, settings, adminUsers] = await Promise.all([
       loadDashboardData(),
-      getTiers(),
       getSettings(),
       getAdminUsers(),
     ]);
-    res.send(renderDashboard({ ...data, tiers, settings, adminUsers, activeTab: 'settings' }));
+    res.send(renderDashboard({ ...data, settings, adminUsers, activeTab: 'settings' }));
   } catch (err) {
     console.error('[Admin] Settings error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
@@ -196,7 +195,10 @@ router.post('/api/referral/:id/payout', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: `Cannot pay out a referral with status: ${referral.status}` });
     }
 
-    const payoutAmount = parseFloat(amount || referral.reward_amount || 75);
+    const payoutAmount = parseFloat(amount || referral.reward_amount || 0);
+    if (!(payoutAmount > 0)) {
+      return res.status(400).json({ error: 'Payout amount is missing or zero' });
+    }
 
     // Create payout record
     await supabase.from('payouts').insert({
@@ -268,61 +270,60 @@ router.post('/api/referral/:id/mark-rejected', requireAdmin, async (req, res) =>
 });
 
 // ──────────────────────────────────────────────────────────────
-// TIERS CRUD (super_admin only)
-// ──────────────────────────────────────────────────────────────
-router.post('/api/tiers', requireSuperAdmin, async (req, res) => {
-  const { label, min_job_value, max_job_value, payout_amount } = req.body;
-
-  if (!label || min_job_value == null || !payout_amount) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
-  const { data, error } = await supabase.from('referral_tiers').insert({
-    label,
-    min_job_value: parseFloat(min_job_value),
-    max_job_value: max_job_value ? parseFloat(max_job_value) : null,
-    payout_amount: parseFloat(payout_amount),
-  }).select().single();
-
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ success: true, tier: data });
-});
-
-router.put('/api/tiers/:id', requireSuperAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { label, min_job_value, max_job_value, payout_amount, active } = req.body;
-
-  const updates = {};
-  if (label !== undefined) updates.label = label;
-  if (min_job_value !== undefined) updates.min_job_value = parseFloat(min_job_value);
-  if (max_job_value !== undefined) updates.max_job_value = max_job_value ? parseFloat(max_job_value) : null;
-  if (payout_amount !== undefined) updates.payout_amount = parseFloat(payout_amount);
-  if (active !== undefined) updates.active = active;
-
-  const { error } = await supabase.from('referral_tiers').update(updates).eq('id', id);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ success: true });
-});
-
-router.delete('/api/tiers/:id', requireSuperAdmin, async (req, res) => {
-  const { error } = await supabase.from('referral_tiers').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ success: true });
-});
-
-// ──────────────────────────────────────────────────────────────
 // SETTINGS
 // ──────────────────────────────────────────────────────────────
+const ALLOWED_SETTINGS = new Set([
+  'min_job_value',
+  'new_customer_discount',
+  'payout_percentage',
+  'payout_cap',
+  'membership_flat',
+  'membership_item_codes',
+]);
+
+const NUMERIC_SETTINGS = {
+  min_job_value:         { min: 0 },
+  new_customer_discount: { min: 0 },
+  payout_percentage:     { min: 0, max: 100 },
+  payout_cap:            { min: 0 },
+  membership_flat:       { min: 0 },
+};
+
 router.post('/api/settings', requireSuperAdmin, async (req, res) => {
   const { settings } = req.body;
   if (!settings || typeof settings !== 'object') {
     return res.status(400).json({ error: 'Invalid settings' });
   }
 
-  for (const [key, value] of Object.entries(settings)) {
+  const updates = [];
+  for (const [key, rawValue] of Object.entries(settings)) {
+    if (!ALLOWED_SETTINGS.has(key)) {
+      return res.status(400).json({ error: `Unknown setting: ${key}` });
+    }
+    const bounds = NUMERIC_SETTINGS[key];
+    let value = rawValue;
+    if (bounds) {
+      const n = parseFloat(rawValue);
+      if (!Number.isFinite(n)) {
+        return res.status(400).json({ error: `${key} must be a number` });
+      }
+      if (bounds.min !== undefined && n < bounds.min) {
+        return res.status(400).json({ error: `${key} must be ≥ ${bounds.min}` });
+      }
+      if (bounds.max !== undefined && n > bounds.max) {
+        return res.status(400).json({ error: `${key} must be ≤ ${bounds.max}` });
+      }
+      value = String(n);
+    } else {
+      value = String(rawValue ?? '');
+    }
+    updates.push({ key, value });
+  }
+
+  for (const row of updates) {
     await supabase
       .from('system_settings')
-      .upsert({ key, value: String(value), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+      .upsert({ key: row.key, value: row.value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
   }
 
   res.json({ success: true });
