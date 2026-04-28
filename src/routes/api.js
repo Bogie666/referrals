@@ -30,11 +30,14 @@ async function getPortalPayoutInfo() {
 router.get('/referral/:slugOrCode', async (req, res) => {
   const { slugOrCode } = req.params;
 
-  const { data: customer, error } = await supabase
-    .from('customers')
-    .select('id, name, referral_slug, referral_code, referral_link, total_referrals')
-    .or('referral_slug.eq.' + slugOrCode + ',referral_code.eq.' + slugOrCode.toUpperCase())
-    .single();
+  const [{ data: customer, error }, payoutInfo] = await Promise.all([
+    supabase
+      .from('customers')
+      .select('id, name, referral_slug, referral_code, referral_link, total_referrals')
+      .or('referral_slug.eq.' + slugOrCode + ',referral_code.eq.' + slugOrCode.toUpperCase())
+      .single(),
+    getPortalPayoutInfo(),
+  ]);
 
   if (error || !customer) {
     return res.status(404).json({ error: 'Referral link not found' });
@@ -45,8 +48,10 @@ router.get('/referral/:slugOrCode', async (req, res) => {
     slug: customer.referral_slug,
     code: customer.referral_code,
     referralLink: customer.referral_link,
-    discount: process.env.NEW_CUSTOMER_DISCOUNT || '50',
-    reward: process.env.REFERRER_REWARD || '75',
+    discount: payoutInfo.discountAmount,
+    payoutPercentage: payoutInfo.payoutPercentage,
+    payoutCap: payoutInfo.payoutCap,
+    membershipFlat: payoutInfo.membershipFlat,
   });
 });
 
