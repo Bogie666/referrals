@@ -117,13 +117,32 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
       --navy:   #1d3a6e;
       --orange: #e85c24;
       --green:  #10b981;
-      --bg:     #f1f5f9;
-      --card:   #ffffff;
-      --text:   #0f172a;
-      --muted:  #64748b;
-      --border: #e2e8f0;
+      --bg:        #f1f5f9;
+      --card:      #ffffff;
+      --text:      #0f172a;
+      --muted:     #64748b;
+      --border:    #e2e8f0;
+      --row-hover: #f8fafc;
+      --code-bg:   #f1f5f9;
+      --input-bg:  #ffffff;
+      --shadow:    0 1px 3px rgba(15, 23, 42, 0.06);
+      --link-accent: #3b82f6;
       --sidebar-w: 220px;
     }
+
+    [data-theme="dark"] {
+      --bg:        #0b1220;
+      --card:      #111a2e;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --border:    #1f2c44;
+      --row-hover: #18243d;
+      --code-bg:   #18243d;
+      --input-bg:  #0e1729;
+      --shadow:    0 1px 3px rgba(0, 0, 0, 0.5);
+      --link-accent: #60a5fa;
+    }
+    [data-theme="dark"] body { color-scheme: dark; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -179,6 +198,31 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     .sidebar-footer {
       padding: 16px 12px;
       border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar-theme-toggle {
+      width: 100%;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 12px;
+      margin-bottom: 6px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: transparent;
+      color: rgba(255,255,255,0.75);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .sidebar-theme-toggle:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .sidebar-theme-toggle__label { letter-spacing: 0.02em; }
+    .sidebar-theme-toggle__value {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.85);
+      background: rgba(255,255,255,0.1);
+      padding: 2px 8px;
+      border-radius: 999px;
     }
     .sidebar-footer a {
       display: block;
@@ -343,11 +387,11 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
       text-transform: uppercase;
       letter-spacing: 0.05em;
       border-bottom: 1px solid var(--border);
-      background: #f8fafc;
+      background: var(--row-hover);
     }
     tbody tr { border-bottom: 1px solid var(--border); }
     tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: #f8fafc; }
+    tbody tr:hover { background: var(--row-hover); }
     tbody td {
       padding: 12px 16px;
       vertical-align: middle;
@@ -440,19 +484,22 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     }
     .modal-overlay.active { display: flex; }
     .modal-box {
-      background: #fff;
+      background: var(--card);
       border-radius: 16px;
       padding: 32px;
       width: 100%;
       max-width: 460px;
       box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+      color: var(--text);
     }
     .modal-box h3 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
-    .modal-box label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .modal-box label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
     .modal-box select, .modal-box input, .modal-box textarea {
       width: 100%; padding: 10px 14px; border: 1px solid var(--border);
       border-radius: 8px; font-size: 14px; margin-bottom: 16px; outline: none;
       font-family: inherit;
+      background: var(--input-bg);
+      color: var(--text);
     }
     .modal-box select:focus, .modal-box input:focus, .modal-box textarea:focus {
       border-color: var(--navy); box-shadow: 0 0 0 3px rgba(29,58,110,0.1);
@@ -488,6 +535,8 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     .form-group input, .form-group select {
       width: 100%; padding: 10px 14px; border: 1px solid var(--border);
       border-radius: 8px; font-size: 14px; outline: none;
+      background: var(--input-bg);
+      color: var(--text);
     }
     .form-group input:focus, .form-group select:focus {
       border-color: var(--navy); box-shadow: 0 0 0 3px rgba(29,58,110,0.1);
@@ -590,6 +639,15 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
       .activity-item { padding: 10px 14px; }
     }
   </style>
+  <script>
+    // Apply persisted theme before paint to avoid a flash
+    (function() {
+      try {
+        var t = localStorage.getItem('lex_admin_theme');
+        if (t === 'dark') document.documentElement.dataset.theme = 'dark';
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
 
@@ -615,6 +673,10 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
     `).join('')}
   </nav>
   <div class="sidebar-footer">
+    <button class="sidebar-theme-toggle" type="button" onclick="toggleTheme()">
+      <span class="sidebar-theme-toggle__label">Theme</span>
+      <span class="sidebar-theme-toggle__value" id="theme-toggle-value">Light</span>
+    </button>
     <a href="/admin/logout">Sign Out</a>
   </div>
 </aside>
@@ -654,6 +716,14 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
 </div>
 
 <script>
+// -- Theme-aware chart defaults --
+const __isDark = document.documentElement.dataset.theme === 'dark';
+const __chartGridColor = __isDark ? 'rgba(148, 163, 184, 0.15)' : '#f1f5f9';
+if (window.Chart) {
+  Chart.defaults.color = __isDark ? '#cbd5e1' : '#475569';
+  Chart.defaults.borderColor = __chartGridColor;
+}
+
 // -- Trend chart (overview only) --
 const trendCtx = document.getElementById('trendChart');
 if (trendCtx) {
@@ -685,7 +755,7 @@ if (trendCtx) {
       maintainAspectRatio: false,
       plugins: { legend: { position: 'top', labels: { font: { size: 12 } } } },
       scales: {
-        y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } },
+        y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: __chartGridColor } },
         x: { grid: { display: false } }
       }
     }
@@ -792,6 +862,24 @@ function closeSidebar() {
 document.querySelectorAll('.sidebar-nav a, .sidebar-footer a').forEach(function(link) {
   link.addEventListener('click', closeSidebar);
 });
+
+// -- Theme toggle --
+function applyTheme(theme) {
+  if (theme === 'dark') {
+    document.documentElement.dataset.theme = 'dark';
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+  var label = document.getElementById('theme-toggle-value');
+  if (label) label.textContent = theme === 'dark' ? 'Dark' : 'Light';
+}
+function toggleTheme() {
+  var current = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+  var next = current === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('lex_admin_theme', next); } catch (e) {}
+  applyTheme(next);
+}
+applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
 </script>
 </body>
 </html>`;
@@ -1184,12 +1272,12 @@ function renderReferrersTab(topReferrers) {
                 <td><span style="font-weight:700;font-size:16px;">${c.total_referrals}</span></td>
                 <td style="font-weight:600;color:var(--green);">${formatCurrency(c.total_rewards)}</td>
                 <td>
-                  <code style="font-size:12px;background:#f1f5f9;padding:3px 8px;border-radius:4px;">
+                  <code style="font-size:12px;background:var(--code-bg);padding:3px 8px;border-radius:4px;">
                     ${c.referral_link}
                   </code>
                 </td>
                 <td>
-                  ${c.referral_code ? `<code style="font-size:12px;background:#f1f5f9;padding:3px 8px;border-radius:4px;font-weight:600;">${c.referral_code}</code>` : '—'}
+                  ${c.referral_code ? `<code style="font-size:12px;background:var(--code-bg);padding:3px 8px;border-radius:4px;font-weight:600;">${c.referral_code}</code>` : '—'}
                 </td>
                 <td style="color:var(--muted);">${formatDate(c.created_at)}</td>
               </tr>
@@ -1467,16 +1555,12 @@ function renderSettingsTab(settings, adminUsers) {
 // ──────────────────────────────────────────────────────────────
 function renderPortalTab() {
   const demoPhones = [
-    { label: 'Sarah Mitchell',  phone: '9724561001', sub: '3 referrals' },
-    { label: 'James Thornton',  phone: '9724561002', sub: '2 referrals' },
-    { label: 'Maria Gonzalez',  phone: '9724561003', sub: '2 referrals' },
-    { label: 'Robert Chen',     phone: '9724561004', sub: '1 referral' },
-    { label: 'Marcus Johnson',  phone: '9724561008', sub: '1 referral' },
-  ];
-  const stDemoPhones = [
-    { label: 'Jennifer Walsh',  phone: '9725550101', sub: 'ST self-signup' },
-    { label: 'Mike Castillo',   phone: '9725550102', sub: 'ST self-signup' },
-    { label: 'Tyler Brooks',    phone: '9725550201', sub: 'No completed jobs' },
+    { label: 'Sarah Mitchell',  phone: '9724560001', sub: '2 rewarded' },
+    { label: 'James Thornton',  phone: '9724560002', sub: '1 rewarded · 1 needs payout' },
+    { label: 'Maria Gonzalez',  phone: '9724560003', sub: '1 booked' },
+    { label: 'Robert Chen',     phone: '9724560004', sub: 'No referrals yet' },
+    { label: 'Linda Patterson', phone: '9724560005', sub: '1 rejected' },
+    { label: 'Ryan Minton',     phone: '4699905610', sub: 'No referrals yet' },
   ];
 
   return `
@@ -1514,28 +1598,6 @@ function renderPortalTab() {
             "
             onmouseover="this.style.background='var(--navy)';this.style.color='#fff';this.style.borderColor='var(--navy)';"
             onmouseout="this.style.background='var(--card)';this.style.color='var(--text)';this.style.borderColor='var(--border)';"
-          >
-            <div>${d.label}</div>
-            ${d.sub ? `<div style="font-size:11px; opacity:0.65; margin-top:1px;">${d.sub}</div>` : ''}
-          </button>
-        `).join('')}
-      </div>
-      <div style="font-size:12px; font-weight:600; color:var(--muted);
-                  text-transform:uppercase; letter-spacing:0.05em; margin:14px 0 10px;">
-        ServiceTitan Self-Signup Demo
-      </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        ${stDemoPhones.map(d => `
-          <button
-            onclick="portalQuickPick('${d.phone}')"
-            style="
-              padding:8px 14px; border-radius:8px;
-              border:1px solid #c7d2fe; background:#eef2ff;
-              font-size:13px; font-weight:500; cursor:pointer;
-              color:var(--text); transition:all 0.15s; text-align:left;
-            "
-            onmouseover="this.style.background='var(--navy)';this.style.color='#fff';this.style.borderColor='var(--navy)';"
-            onmouseout="this.style.background='#eef2ff';this.style.color='var(--text)';this.style.borderColor='#c7d2fe';"
           >
             <div>${d.label}</div>
             ${d.sub ? `<div style="font-size:11px; opacity:0.65; margin-top:1px;">${d.sub}</div>` : ''}
