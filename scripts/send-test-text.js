@@ -63,8 +63,10 @@ async function main() {
     process.exit(1);
   }
 
-  if (!process.env.CHIIRP_WEBHOOK_URL) {
-    console.error('CHIIRP_WEBHOOK_URL is not set in your .env — nothing would actually fire.');
+  const demoMode = process.env.DEMO_MODE === 'true';
+  if (!demoMode && !process.env.CHIIRP_WEBHOOK_URL) {
+    console.error('CHIIRP_WEBHOOK_URL is not set in your .env, and DEMO_MODE is off.');
+    console.error('Set CHIIRP_WEBHOOK_URL to fire a real webhook, or DEMO_MODE=true to preview to console.');
     process.exit(1);
   }
 
