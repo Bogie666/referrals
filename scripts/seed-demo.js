@@ -35,6 +35,7 @@ const DEMO_CUSTOMERS = [
   { st_customer_id: 'DEMO-003', name: 'Maria Gonzalez',  phone: '9724560003', email: 'maria.gonzalez@example.com' },
   { st_customer_id: 'DEMO-004', name: 'Robert Chen',     phone: '9724560004', email: 'robert.chen@example.com' },
   { st_customer_id: 'DEMO-005', name: 'Linda Patterson', phone: '9724560005', email: 'linda.patt@example.com' },
+  { st_customer_id: 'DEMO-006', name: 'Ryan Minton',     phone: '4699905610', email: 'ryan.minton@example.com' },
 ];
 
 // ── Demo referrals — referrerIdx is the index in DEMO_CUSTOMERS ─
