@@ -1,243 +1,250 @@
 /**
  * LEX Referral App — Demo Seed Script
  * ─────────────────────────────────────────────────────────────
- * Populates the database with realistic fake data for demos.
+ * Populates the database with a small, realistic demo dataset.
  *
  * Usage:
- *   node scripts/seed-demo.js          ← seeds the database
- *   node scripts/seed-demo.js --clear  ← wipes all demo data first, then re-seeds
+ *   node scripts/seed-demo.js          ← seeds the database (errors if data exists)
+ *   node scripts/seed-demo.js --clear  ← wipes ALL customer/referral data, then re-seeds
  *
- * Safe to run multiple times with --clear.
- * Does NOT affect real ServiceTitan or send any texts/gift cards.
+ * --clear is destructive: it deletes every row in
+ *   customers, referrals, payouts, job_events, texts_log
+ * regardless of whether it was created by this script. It does NOT
+ * touch system_settings, admin_users, poll_state, or referral_tiers.
+ *
+ * Codes are generated via generateUniqueReferralCode (6-char
+ * alphanumeric, no ambiguous chars). Reward amounts are computed
+ * via calculatePayout() against the live system_settings values.
  * ─────────────────────────────────────────────────────────────
  */
 
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-const { generateSlug, buildReferralLink } = require('../src/utils/slugs');
+const { generateSlug, buildReferralLink, generateUniqueReferralCode } = require('../src/utils/slugs');
+const { calculatePayout } = require('../src/utils/payout');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// ── Fake customers (these will become referrers) ──────────────
+// ── Demo customers (referrers) ────────────────────────────────
 const DEMO_CUSTOMERS = [
-  { st_customer_id: 'DEMO-001', name: 'Sarah Mitchell',  phone: '9724561001', email: 'sarah.mitchell@email.com' },
-  { st_customer_id: 'DEMO-002', name: 'James Thornton',  phone: '9724561002', email: 'james.thornton@email.com' },
-  { st_customer_id: 'DEMO-003', name: 'Maria Gonzalez',  phone: '9724561003', email: 'maria.gonzalez@email.com' },
-  { st_customer_id: 'DEMO-004', name: 'Robert Chen',     phone: '9724561004', email: 'robert.chen@email.com'    },
-  { st_customer_id: 'DEMO-005', name: 'Linda Patterson', phone: '9724561005', email: 'linda.patt@email.com'     },
-  { st_customer_id: 'DEMO-006', name: 'David Nguyen',    phone: '9724561006', email: 'david.nguyen@email.com'   },
-  { st_customer_id: 'DEMO-007', name: 'Karen Williams',  phone: '9724561007', email: 'karen.w@email.com'        },
-  { st_customer_id: 'DEMO-008', name: 'Marcus Johnson',  phone: '9724561008', email: 'marcus.j@email.com'       },
-  { st_customer_id: 'DEMO-009', name: 'Patricia Lee',    phone: '9724561009', email: 'pat.lee@email.com'        },
-  { st_customer_id: 'DEMO-010', name: 'Tom Ramirez',     phone: '9724561010', email: 'tom.ramirez@email.com'    },
-  { st_customer_id: 'DEMO-011', name: 'Angela Brooks',   phone: '9724561011', email: 'angela.b@email.com'       },
-  { st_customer_id: 'DEMO-012', name: 'Chris Walker',    phone: '9724561012', email: 'cwalker@email.com'        },
+  { st_customer_id: 'DEMO-001', name: 'Sarah Mitchell',  phone: '9724560001', email: 'sarah.mitchell@example.com' },
+  { st_customer_id: 'DEMO-002', name: 'James Thornton',  phone: '9724560002', email: 'james.thornton@example.com' },
+  { st_customer_id: 'DEMO-003', name: 'Maria Gonzalez',  phone: '9724560003', email: 'maria.gonzalez@example.com' },
+  { st_customer_id: 'DEMO-004', name: 'Robert Chen',     phone: '9724560004', email: 'robert.chen@example.com' },
+  { st_customer_id: 'DEMO-005', name: 'Linda Patterson', phone: '9724560005', email: 'linda.patt@example.com' },
 ];
 
-// ── Fake referred people + their outcomes ─────────────────────
+// ── Demo referrals — referrerIdx is the index in DEMO_CUSTOMERS ─
 const DEMO_REFERRALS = [
-  // Sarah has 3 referrals — your top performer
-  { referrerIdx: 0, name: 'Kevin Mitchell',  phone: '9724562001', email: 'kevin.m@email.com',    status: 'rewarded',  jobValue: 485, daysAgo: 45 },
-  { referrerIdx: 0, name: 'Amy Caldwell',    phone: '9724562002', email: 'amy.c@email.com',       status: 'rewarded',  jobValue: 320, daysAgo: 22 },
-  { referrerIdx: 0, name: 'Brett Simpson',   phone: '9724562003', email: null,                    status: 'booked',    jobValue: null,daysAgo: 5  },
+  // Sarah — top performer, 2 rewarded; Amy's $5,500 invoice hits the $250 cap
+  { referrerIdx: 0, name: 'Kevin Mitchell', phone: '9724562001', email: 'kevin.m@example.com', status: 'rewarded',  jobValue: 485,  daysAgo: 45 },
+  { referrerIdx: 0, name: 'Amy Caldwell',   phone: '9724562002', email: 'amy.c@example.com',   status: 'rewarded',  jobValue: 5500, daysAgo: 22 },
 
-  // James has 2
-  { referrerIdx: 1, name: 'Donna Harper',    phone: '9724562004', email: 'donna.h@email.com',     status: 'rewarded',  jobValue: 210, daysAgo: 30 },
-  { referrerIdx: 1, name: 'Steve Olson',     phone: '9724562005', email: null,                    status: 'completed', jobValue: 575, daysAgo: 3  },
+  // James — 1 rewarded, 1 awaiting payout (lights up the dashboard alert)
+  { referrerIdx: 1, name: 'Donna Harper',   phone: '9724562003', email: 'donna.h@example.com', status: 'rewarded',  jobValue: 750,  daysAgo: 30 },
+  { referrerIdx: 1, name: 'Steve Olson',    phone: '9724562004', email: 'steve.o@example.com', status: 'completed', jobValue: 1200, daysAgo: 3  },
 
-  // Maria has 2
-  { referrerIdx: 2, name: 'Julia Reyes',     phone: '9724562006', email: 'julia.r@email.com',     status: 'rewarded',  jobValue: 890, daysAgo: 60 },
-  { referrerIdx: 2, name: 'Carlos Mendez',   phone: '9724562007', email: null,                    status: 'pending',   jobValue: null,daysAgo: 1  },
+  // Maria — referral booked but job not yet complete
+  { referrerIdx: 2, name: 'Carlos Mendez',  phone: '9724562005', email: null,                  status: 'booked',    jobValue: null, daysAgo: 1  },
 
-  // Robert has 1
-  { referrerIdx: 3, name: 'Fiona Chang',     phone: '9724562008', email: 'fiona.c@email.com',     status: 'rewarded',  jobValue: 340, daysAgo: 15 },
+  // Linda — referral rejected (below $150 minimum)
+  { referrerIdx: 4, name: 'Tina Wallace',   phone: '9724562006', email: 'tina.w@example.com',  status: 'rejected',  jobValue: 85,   daysAgo: 12, rejectionReason: 'Job total $85 below minimum threshold of $150' },
 
-  // Linda has 1
-  { referrerIdx: 4, name: 'Gary Simmons',    phone: '9724562009', email: null,                    status: 'booked',    jobValue: null,daysAgo: 8  },
-
-  // David has 1
-  { referrerIdx: 5, name: 'Tina Wallace',    phone: '9724562010', email: 'tina.w@email.com',      status: 'rejected',  jobValue: 85,  daysAgo: 12, rejectionReason: 'Job total $85 below minimum threshold of $150' },
-
-  // Karen — pending only
-  { referrerIdx: 6, name: null,              phone: null,          email: null,                   status: 'pending',   jobValue: null,daysAgo: 2  },
-
-  // Marcus has 1 rewarded
-  { referrerIdx: 7, name: 'Debra Stone',     phone: '9724562011', email: 'debra.s@email.com',     status: 'rewarded',  jobValue: 450, daysAgo: 20 },
-
-  // Patricia — pending
-  { referrerIdx: 8, name: null,              phone: null,          email: null,                   status: 'pending',   jobValue: null,daysAgo: 0  },
-
-  // Tom — pending
-  { referrerIdx: 9, name: null,              phone: null,          email: null,                   status: 'pending',   jobValue: null,daysAgo: 1  },
+  // Robert (idx 3) intentionally has zero referrals
 ];
 
-// ── Historical months for texts_log ───────────────────────────
-function daysAgoDate(days) {
+const PAYMENT_METHODS = ['physical_card', 'virtual_card'];
+const SENTINEL_UUID = '00000000-0000-0000-0000-000000000000';
+
+function daysAgoIso(days) {
   const d = new Date();
   d.setDate(d.getDate() - days);
   return d.toISOString();
 }
 
-function randomBetween(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+async function loadPayoutSettings() {
+  const { data } = await supabase
+    .from('system_settings')
+    .select('key, value')
+    .in('key', ['payout_percentage', 'payout_cap', 'min_job_value']);
+  const out = {};
+  (data || []).forEach(row => { out[row.key] = row.value; });
+  return out;
 }
 
-// ── Main ───────────────────────────────────────────────────────
+async function clearAll() {
+  console.log('\n🗑  Clearing customer/referral data...');
+  // Delete order matters because of FKs:
+  // payouts → referrals → texts_log → customers; job_events is independent
+  for (const table of ['payouts', 'texts_log', 'referrals', 'job_events', 'customers']) {
+    const { error } = await supabase.from(table).delete().neq('id', SENTINEL_UUID);
+    if (error) {
+      throw new Error(`Failed to clear ${table}: ${error.message}`);
+    }
+    console.log(`   ✓ ${table} cleared`);
+  }
+}
+
 async function seed() {
   const shouldClear = process.argv.includes('--clear');
 
-  console.log('\n🌱 LEX Referral Demo Seed Script');
-  console.log('─────────────────────────────────');
+  console.log('\n🌱 LEX Referral Demo Seed');
+  console.log('─────────────────────────');
 
   if (shouldClear) {
-    console.log('\n🗑  Clearing existing demo data...');
-    // Delete in order to respect foreign keys
-    await supabase.from('texts_log').delete().like('phone', '97245620%');
-    await supabase.from('texts_log').delete().like('phone', '97245610%');
-    await supabase.from('job_events').delete().like('st_job_id', 'DEMO-%');
-
-    // Get demo customer IDs first
-    const { data: demoCusts } = await supabase
+    await clearAll();
+  } else {
+    const { count } = await supabase
       .from('customers')
-      .select('id')
-      .like('st_customer_id', 'DEMO-%');
-
-    if (demoCusts?.length) {
-      const ids = demoCusts.map(c => c.id);
-      await supabase.from('referrals').delete().in('referrer_id', ids);
+      .select('id', { count: 'exact', head: true });
+    if (count && count > 0) {
+      console.error(`\n❌ Refusing to seed: ${count} customer row(s) already exist.`);
+      console.error('   Re-run with --clear to wipe and reseed.');
+      process.exit(1);
     }
-
-    await supabase.from('customers').delete().like('st_customer_id', 'DEMO-%');
-    console.log('   ✓ Demo data cleared');
   }
 
-  // ── Step 1: Create customers ──
-  console.log('\n👥 Creating demo customers...');
-  const createdCustomers = [];
+  const settings = await loadPayoutSettings();
+  console.log(`\n⚙  Using payout settings: ${settings.payout_percentage || '5'}% capped at $${settings.payout_cap || '250'}`);
 
+  // ── Step 1: Create customers with fresh codes ──
+  console.log('\n👥 Creating customers...');
+  const customers = [];
   for (const c of DEMO_CUSTOMERS) {
     const slug = generateSlug(c.name);
-    const referral_link = buildReferralLink(slug);
+    const referralLink = buildReferralLink(slug);
+    const referralCode = await generateUniqueReferralCode(supabase);
 
     const { data, error } = await supabase
       .from('customers')
-      .insert({ ...c, referral_slug: slug, referral_link })
+      .insert({
+        ...c,
+        referral_slug: slug,
+        referral_link: referralLink,
+        referral_code: referralCode,
+        invite_sent_at: daysAgoIso(60),
+      })
       .select()
       .single();
 
     if (error) {
-      console.error(`   ✗ Failed to create ${c.name}:`, error.message);
-      createdCustomers.push(null);
+      console.error(`   ✗ ${c.name}: ${error.message}`);
+      customers.push(null);
     } else {
-      console.log(`   ✓ ${c.name} → ${slug}`);
-      createdCustomers.push(data);
+      console.log(`   ✓ ${c.name.padEnd(20)} code: ${referralCode}`);
+      customers.push(data);
     }
   }
 
-  // ── Step 2: Create referrals ──
-  console.log('\n🔗 Creating demo referrals...');
-  const rewardAmount = parseFloat(process.env.REFERRER_REWARD || '75');
+  // ── Step 2: Create referrals + (for rewarded) payout rows ──
+  console.log('\n🔗 Creating referrals...');
+  const totals = {}; // referrerIdx → { count, rewards }
 
   for (const ref of DEMO_REFERRALS) {
-    const referrer = createdCustomers[ref.referrerIdx];
+    const referrer = customers[ref.referrerIdx];
     if (!referrer) continue;
 
-    const createdAt = daysAgoDate(ref.daysAgo);
-    const isRewarded = ref.status === 'rewarded';
+    const createdAt = daysAgoIso(ref.daysAgo);
 
-    const { error } = await supabase.from('referrals').insert({
-      referrer_id:        referrer.id,
-      referred_name:      ref.name,
-      referred_phone:     ref.phone,
-      referred_email:     ref.email,
-      referred_st_id:     ref.name ? `DEMO-REF-${Math.random().toString(36).slice(2,8).toUpperCase()}` : null,
-      referred_job_id:    ref.jobValue ? `DEMO-JOB-${Math.random().toString(36).slice(2,8).toUpperCase()}` : null,
-      referred_job_value: ref.jobValue,
-      status:             ref.status,
-      rejection_reason:   ref.rejectionReason || null,
-      reward_amount:      rewardAmount,
-      tango_order_id:     isRewarded ? `TANGO-DEMO-${Math.random().toString(36).slice(2,8).toUpperCase()}` : null,
-      tango_sent_at:      isRewarded ? createdAt : null,
-      created_at:         createdAt,
-      updated_at:         createdAt,
-    });
+    let rewardAmount = 0;
+    if (ref.status === 'rewarded' || ref.status === 'completed') {
+      const calc = calculatePayout({ invoiceTotal: ref.jobValue || 0, settings });
+      rewardAmount = calc.amount;
+    }
+
+    const { data: insertedReferral, error } = await supabase
+      .from('referrals')
+      .insert({
+        referrer_id:        referrer.id,
+        referred_name:      ref.name,
+        referred_phone:     ref.phone,
+        referred_email:     ref.email,
+        referred_st_id:     ref.name ? `DEMO-REF-${ref.referrerIdx}-${ref.daysAgo}` : null,
+        referred_job_id:    ref.jobValue ? `DEMO-JOB-${ref.referrerIdx}-${ref.daysAgo}` : null,
+        referred_job_value: ref.jobValue,
+        status:             ref.status,
+        rejection_reason:   ref.rejectionReason || null,
+        reward_amount:      rewardAmount,
+        created_at:         createdAt,
+        updated_at:         createdAt,
+      })
+      .select()
+      .single();
 
     if (error) {
-      console.error(`   ✗ Referral for ${ref.name || 'pending'}:`, error.message);
-    } else {
-      console.log(`   ✓ ${referrer.name} → ${ref.name || '(pending click)'} [${ref.status}]`);
+      console.error(`   ✗ ${referrer.name} → ${ref.name || '(pending)'}: ${error.message}`);
+      continue;
     }
-  }
 
-  // ── Step 3: Update customer totals ──
-  console.log('\n📊 Updating customer referral totals...');
-  const rewardedByReferrer = {};
-  for (const ref of DEMO_REFERRALS) {
-    const idx = ref.referrerIdx;
-    if (!rewardedByReferrer[idx]) rewardedByReferrer[idx] = { count: 0, total: 0 };
+    console.log(`   ✓ ${referrer.name.padEnd(20)} → ${(ref.name || '(pending)').padEnd(18)} [${ref.status}]${rewardAmount ? ` $${rewardAmount}` : ''}`);
+
     if (ref.status === 'rewarded') {
-      rewardedByReferrer[idx].count++;
-      rewardedByReferrer[idx].total += rewardAmount;
+      const paidAt = daysAgoIso(Math.max(0, ref.daysAgo - 2));
+      const method = PAYMENT_METHODS[ref.referrerIdx % PAYMENT_METHODS.length];
+      const { error: payoutErr } = await supabase.from('payouts').insert({
+        referral_id:    insertedReferral.id,
+        admin_user_id:  null,
+        amount:         rewardAmount,
+        payment_method: method,
+        reference_note: 'Seed data',
+        paid_at:        paidAt,
+        created_at:     paidAt,
+      });
+      if (payoutErr) {
+        console.error(`     ✗ payout row: ${payoutErr.message}`);
+      } else {
+        if (!totals[ref.referrerIdx]) totals[ref.referrerIdx] = { count: 0, rewards: 0 };
+        totals[ref.referrerIdx].count++;
+        totals[ref.referrerIdx].rewards += rewardAmount;
+      }
     }
   }
 
-  for (const [idx, stats] of Object.entries(rewardedByReferrer)) {
-    const customer = createdCustomers[parseInt(idx)];
-    if (!customer || stats.count === 0) continue;
+  // ── Step 3: Update customer totals to match payouts ──
+  console.log('\n📊 Updating customer totals...');
+  for (const [idxStr, t] of Object.entries(totals)) {
+    const customer = customers[parseInt(idxStr)];
+    if (!customer) continue;
     await supabase
       .from('customers')
-      .update({ total_referrals: stats.count, total_rewards: stats.total })
+      .update({ total_referrals: t.count, total_rewards: t.rewards })
       .eq('id', customer.id);
-    console.log(`   ✓ ${customer.name}: ${stats.count} referral(s), $${stats.total} earned`);
+    console.log(`   ✓ ${customer.name}: ${t.count} rewarded, $${t.rewards.toFixed(2)} earned`);
   }
 
-  // ── Step 4: Create some texts_log entries ──
-  console.log('\n💬 Creating texts log entries...');
+  // ── Step 4: Texts_log entries (one invite per customer) ──
+  console.log('\n💬 Logging invite texts...');
   let textCount = 0;
-  for (const customer of createdCustomers) {
-    if (!customer) continue;
+  for (const c of customers) {
+    if (!c) continue;
     const { error } = await supabase.from('texts_log').insert({
-      customer_id:   customer.id,
-      phone:         customer.phone,
-      message:       `Hey ${customer.name.split(' ')[0]}! Thanks for choosing LEX Air Conditioning. Know someone who needs AC, heating, plumbing, or electrical work? Share your link and earn $${rewardAmount}! ${customer.referral_link}`,
-      chiirp_msg_id: `DEMO-MSG-${Math.random().toString(36).slice(2,10).toUpperCase()}`,
+      customer_id:   c.id,
+      phone:         c.phone,
+      message:       `Hey ${c.name.split(' ')[0]}! Thanks for choosing LEX. Share your referral code ${c.referral_code} with friends — they save $50, you earn 5% of their invoice.`,
+      chiirp_msg_id: `DEMO-MSG-${c.st_customer_id}`,
       status:        'sent',
-      sent_at:       daysAgoDate(randomBetween(1, 60)),
+      sent_at:       daysAgoIso(60),
     });
     if (!error) textCount++;
   }
-  console.log(`   ✓ ${textCount} invite texts logged`);
-
-  // ── Step 5: Create some fake job events ──
-  console.log('\n📋 Creating job event log...');
-  let eventCount = 0;
-  for (let i = 0; i < 8; i++) {
-    const customer = createdCustomers[i % createdCustomers.length];
-    if (!customer) continue;
-    await supabase.from('job_events').insert({
-      st_job_id:      `DEMO-JOB-${i.toString().padStart(3, '0')}`,
-      st_customer_id: customer.st_customer_id,
-      event_type:     'job.completed',
-      payload:        { demo: true, customerId: customer.st_customer_id, total: randomBetween(150, 900) },
-      processed:      true,
-      created_at:     daysAgoDate(randomBetween(1, 60)),
-    });
-    eventCount++;
-  }
-  console.log(`   ✓ ${eventCount} job events logged`);
+  console.log(`   ✓ ${textCount} invite text(s) logged`);
 
   // ── Summary ──
-  console.log('\n✅ Demo seed complete!');
-  console.log('─────────────────────────────────');
-  console.log(`   Customers created:  ${createdCustomers.filter(Boolean).length}`);
-  console.log(`   Referrals created:  ${DEMO_REFERRALS.length}`);
-  console.log(`   Rewarded:           ${DEMO_REFERRALS.filter(r => r.status === 'rewarded').length}`);
-  console.log(`   Total paid out:     $${DEMO_REFERRALS.filter(r => r.status === 'rewarded').length * rewardAmount}`);
-  console.log('\n   Visit your admin dashboard to see the data:');
-  console.log(`   ${process.env.SITE_URL || 'https://your-railway-url.up.railway.app'}/admin\n`);
+  const rewardedCount = DEMO_REFERRALS.filter(r => r.status === 'rewarded').length;
+  const completedCount = DEMO_REFERRALS.filter(r => r.status === 'completed').length;
+  const totalPaid = Object.values(totals).reduce((sum, t) => sum + t.rewards, 0);
+
+  console.log('\n✅ Seed complete!');
+  console.log('─────────────────────────');
+  console.log(`   Customers:        ${customers.filter(Boolean).length}`);
+  console.log(`   Referrals:        ${DEMO_REFERRALS.length}`);
+  console.log(`   Rewarded:         ${rewardedCount}`);
+  console.log(`   Awaiting payout:  ${completedCount}`);
+  console.log(`   Total paid:       $${totalPaid.toFixed(2)}`);
+  console.log('\n   Visit /admin to see the dashboard.\n');
 }
 
 seed().catch(err => {
