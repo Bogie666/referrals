@@ -1760,7 +1760,7 @@ function renderPortalTab() {
                   <div class="lex-portal-step-num">2</div>
                   <div>
                     <strong>They book & complete service</strong>
-                    <p>Your friend schedules with LEX and their first service is completed (minimum $150).</p>
+                    <p>Your friend schedules with LEX and completes their first qualifying service (minimum $<span id="lex-step-min">150</span>).</p>
                   </div>
                 </div>
                 <div class="lex-portal-step">
@@ -2083,12 +2083,14 @@ function renderPortalTab() {
 
         var pct = data.payoutPercentage != null ? data.payoutPercentage : 5;
         var cap = data.payoutCap != null ? data.payoutCap : 250;
+        var minJob = data.minJobValue != null ? data.minJobValue : 150;
         var discount = data.discountAmount || 50;
         document.getElementById('lex-reward-amount-display').textContent   = pct + '%';
         document.getElementById('lex-reward-cap-display').textContent      = cap;
         document.getElementById('lex-discount-amount-display').textContent = '$' + discount;
         document.getElementById('lex-step-reward').textContent             = pct + '%';
         document.getElementById('lex-step-cap').textContent                = cap;
+        document.getElementById('lex-step-min').textContent                = minJob;
         document.getElementById('lex-step-discount').textContent           = '$' + discount;
 
         var linkInput = document.getElementById('lex-portal-link-input');

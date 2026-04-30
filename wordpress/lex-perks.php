@@ -34,6 +34,7 @@ define('LEX_PERKS_URL',  'https://lexperks.com');
 define('LEX_PAYOUT_PCT', 5);
 define('LEX_PAYOUT_CAP', 250);
 define('LEX_DISCOUNT',   50);
+define('LEX_MIN_JOB',    150);
 
 // ── Register both shortcodes ──────────────────────────────────
 add_shortcode('lex_referral',        'lex_referral_shortcode');
@@ -439,7 +440,7 @@ function lex_referral_portal_shortcode() {
               <div class="lex-portal-step-num">2</div>
               <div>
                 <strong>They book & complete service</strong>
-                <p>Your friend uses LEX and completes their first service (minimum $150 job).</p>
+                <p>Your friend uses LEX and completes their first qualifying service (minimum $<span id="lex-step-min"><?php echo LEX_MIN_JOB; ?></span> job).</p>
               </div>
             </div>
             <div class="lex-portal-step">
@@ -602,6 +603,7 @@ function lex_referral_portal_shortcode() {
       const API        = '<?php echo LEX_API_URL; ?>';
       const PAYOUT_PCT = <?php echo LEX_PAYOUT_PCT; ?>;
       const PAYOUT_CAP = <?php echo LEX_PAYOUT_CAP; ?>;
+      const MIN_JOB    = <?php echo LEX_MIN_JOB; ?>;
       const DISCOUNT   = <?php echo LEX_DISCOUNT; ?>;
       let currentData = null;
 
@@ -730,12 +732,14 @@ function lex_referral_portal_shortcode() {
 
         const pct      = data.payoutPercentage != null ? data.payoutPercentage : PAYOUT_PCT;
         const cap      = data.payoutCap        != null ? data.payoutCap        : PAYOUT_CAP;
+        const minJob   = data.minJobValue      != null ? data.minJobValue      : MIN_JOB;
         const discount = data.discountAmount   != null ? data.discountAmount   : DISCOUNT;
         document.getElementById('lex-reward-amount-display').textContent  = pct + '%';
         document.getElementById('lex-reward-cap-display').textContent     = cap;
         document.getElementById('lex-discount-amount-display').textContent = '$' + discount;
         document.getElementById('lex-step-reward').textContent            = pct + '%';
         document.getElementById('lex-step-cap').textContent               = cap;
+        document.getElementById('lex-step-min').textContent               = minJob;
         document.getElementById('lex-step-discount').textContent          = '$' + discount;
 
         // Referral link

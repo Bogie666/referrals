@@ -8,7 +8,7 @@ async function getPortalPayoutInfo() {
   const { data } = await supabase
     .from('system_settings')
     .select('key, value')
-    .in('key', ['payout_percentage', 'payout_cap', 'new_customer_discount']);
+    .in('key', ['payout_percentage', 'payout_cap', 'new_customer_discount', 'min_job_value']);
   const map = {};
   (data || []).forEach(row => { map[row.key] = row.value; });
   const num = (v, fallback) => {
@@ -19,6 +19,7 @@ async function getPortalPayoutInfo() {
     payoutPercentage: num(map.payout_percentage, PAYOUT_DEFAULTS.payout_percentage),
     payoutCap:        num(map.payout_cap, PAYOUT_DEFAULTS.payout_cap),
     discountAmount:   num(map.new_customer_discount, parseInt(process.env.NEW_CUSTOMER_DISCOUNT || '50', 10)),
+    minJobValue:      num(map.min_job_value, parseInt(process.env.MIN_JOB_VALUE || '150', 10)),
   };
 }
 
