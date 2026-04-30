@@ -17,12 +17,14 @@ function generateSlug(fullName = '') {
 }
 
 /**
- * Builds the full shareable referral URL.
+ * Builds the full shareable referral URL using the customer's
+ * short referral code (e.g. K7M2P9). REFERRAL_BASE_URL should
+ * be the full path up to the query string, e.g.
+ *   https://lexperks.com/referral
  */
-function buildReferralLink(slug) {
-  const base = process.env.SITE_URL || 'https://lexair.com';
-  const page = process.env.REFERRAL_PAGE_SLUG || 'referral';
-  return `${base}/${page}?r=${slug}`;
+function buildReferralLink(code) {
+  const base = process.env.REFERRAL_BASE_URL || 'https://lexperks.com/referral';
+  return `${base}?r=${code}`;
 }
 
 /**

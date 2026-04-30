@@ -116,8 +116,8 @@ async function seed() {
   const customers = [];
   for (const c of DEMO_CUSTOMERS) {
     const slug = generateSlug(c.name);
-    const referralLink = buildReferralLink(slug);
     const referralCode = await generateUniqueReferralCode(supabase);
+    const referralLink = buildReferralLink(referralCode);
 
     const { data, error } = await supabase
       .from('customers')

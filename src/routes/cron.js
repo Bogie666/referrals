@@ -26,7 +26,7 @@ const {
   writeReferralCodeToCustomer,
 } = require('../services/servicetitan');
 const { calculatePayout } = require('../utils/payout');
-const { generateUniqueReferralCode, normalizeCode } = require('../utils/slugs');
+const { generateSlug, generateUniqueReferralCode, normalizeCode } = require('../utils/slugs');
 
 const REFERRAL_BASE_URL = process.env.REFERRAL_BASE_URL || 'https://lexperks.com/referral';
 const CHIIRP_WEBHOOK  = process.env.CHIIRP_WEBHOOK_URL;
@@ -460,7 +460,10 @@ async function upsertCustomerInSupabase(stCustomer, referralCode, extras = {}) {
     return existing;
   }
 
-  // Create new
+  // Create new — referral_slug is NOT NULL on the schema, even though
+  // the canonical sharable identifier is referral_code. Generate one
+  // for storage compliance.
+  const referralSlug = generateSlug(stCustomer.name || '');
   const { data: created, error: insertErr } = await supabase
     .from('customers')
     .insert({
@@ -468,6 +471,7 @@ async function upsertCustomerInSupabase(stCustomer, referralCode, extras = {}) {
       name:           stCustomer.name,
       phone:          phone || '',
       email:          email || '',
+      referral_slug:  referralSlug,
       referral_link:  referralLink || '',
       referral_code:  referralCode,
     })

@@ -215,8 +215,8 @@ router.post('/portal/lookup', async (req, res) => {
   console.log(`[Portal] Generating referral link for ${contact.name} (ST self-signup)`);
 
   const slug = generateSlug(contact.name);
-  const referralLink = buildReferralLink(slug);
   const referralCode = await generateUniqueReferralCode(supabase);
+  const referralLink = buildReferralLink(referralCode);
 
   const { data: newCustomer, error: insertErr } = await supabase
     .from('customers')

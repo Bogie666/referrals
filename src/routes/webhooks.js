@@ -208,8 +208,8 @@ async function getOrCreateCustomer({ stCustomerId, name, phone, email }) {
   if (existing) return existing;
 
   const slug = generateSlug(name);
-  const referralLink = buildReferralLink(slug);
   const referralCode = await generateUniqueReferralCode(supabase);
+  const referralLink = buildReferralLink(referralCode);
 
   const { data: created, error } = await supabase
     .from('customers')
