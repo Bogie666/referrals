@@ -26,6 +26,7 @@ const {
   writeReferralCodeToCustomer,
 } = require('../services/servicetitan');
 const { calculatePayout } = require('../utils/payout');
+const { generateUniqueReferralCode, normalizeCode } = require('../utils/slugs');
 
 const REFERRAL_BASE_URL = process.env.REFERRAL_BASE_URL || 'https://lexperks.com/referral';
 const CHIIRP_WEBHOOK  = process.env.CHIIRP_WEBHOOK_URL;
@@ -216,9 +217,7 @@ async function processJob(job, token, payoutSettings, results) {
   const name = toTitleCase(customer.name || 'Valued Customer');
 
   // ── Generate referral code ───────────────────────────────
-  const firstName = name.split(' ')[0].toUpperCase().slice(0, 6);
-  const codeSuffix = phone.length >= 4 ? phone.slice(-4) : Math.random().toString(36).slice(2,6).toUpperCase();
-  const referralCode = firstName + '-' + codeSuffix;
+  const referralCode = await generateUniqueReferralCode(supabase);
   const referralLink = REFERRAL_BASE_URL + '?r=' + referralCode;
 
   console.log(`[Poller] Generated code for ${name}: ${referralCode}`);
@@ -270,8 +269,13 @@ async function processJob(job, token, payoutSettings, results) {
 
 // ── Step 6: Match "Referred by Code" back to referrer ────────
 async function matchReferralByCode(referredByCode, referredCustomer, stCustomerId, jobId, jobTotal, payout, results) {
-  const code = referredByCode.trim().toUpperCase();
-  console.log(`[Poller] Job ${jobId} has "Referred by Code": ${code} — matching to referrer`);
+  const code = normalizeCode(referredByCode);
+  console.log(`[Poller] Job ${jobId} has "Referred by Code": ${referredByCode} (normalized: ${code}) — matching to referrer`);
+
+  if (!code) {
+    console.warn(`[Poller] Empty/invalid "Referred by Code" on job ${jobId} — skipping`);
+    return;
+  }
 
   // Look up the referrer by their referral_code
   const { data: referrer } = await supabase
@@ -282,6 +286,17 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
 
   if (!referrer) {
     console.warn(`[Poller] No referrer found for code "${code}" — skipping referral match`);
+    await supabase.from('job_events').insert({
+      st_job_id:      String(jobId),
+      st_customer_id: String(stCustomerId),
+      event_type:     'referral.unmatched',
+      payload:        {
+        referredByCodeRaw:        referredByCode,
+        referredByCodeNormalized: code,
+        referredCustomerName:     referredCustomer.name || null,
+      },
+      processed:      true,
+    });
     return;
   }
 
@@ -446,7 +461,7 @@ async function upsertCustomerInSupabase(stCustomer, referralCode, extras = {}) {
   }
 
   // Create new
-  const { data: created } = await supabase
+  const { data: created, error: insertErr } = await supabase
     .from('customers')
     .insert({
       st_customer_id: id,
@@ -459,6 +474,10 @@ async function upsertCustomerInSupabase(stCustomer, referralCode, extras = {}) {
     .select()
     .single();
 
+  if (insertErr) {
+    console.error(`[Poller] Failed to insert customer ${id} with code ${referralCode}:`, insertErr.message);
+    return null;
+  }
   return created;
 }
 

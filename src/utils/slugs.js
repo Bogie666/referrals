@@ -1,5 +1,8 @@
 const { nanoid } = require('nanoid');
-const crypto = require('crypto');
+
+// 32-char unambiguous alphabet (no 0/1/I/O/L) — safe to read aloud over the phone.
+const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const CODE_LENGTH = 6;
 
 /**
  * Generates a human-friendly referral slug from a customer's name.
@@ -23,12 +26,48 @@ function buildReferralLink(slug) {
 }
 
 /**
- * Generates a short referral code like "4F2A-8B1C".
- * 8 hex characters, uppercase, hyphen in middle.
+ * Generates a 6-character referral code from an unambiguous alphabet.
+ * Example: "K7M2P9". 32^6 ≈ 1B combinations.
  */
 function generateReferralCode() {
-  const hex = crypto.randomBytes(4).toString('hex').toUpperCase();
-  return hex.slice(0, 4) + '-' + hex.slice(4);
+  let code = '';
+  for (let i = 0; i < CODE_LENGTH; i++) {
+    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  }
+  return code;
 }
 
-module.exports = { generateSlug, buildReferralLink, generateReferralCode };
+/**
+ * Normalizes a code as typed by a CSR or customer:
+ * uppercases and strips anything that isn't A–Z or 0–9.
+ * Use on every input that gets compared to a stored referral_code.
+ */
+function normalizeCode(raw) {
+  return String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * Generates a referral code that doesn't collide with any existing
+ * customers.referral_code. Falls back after a few attempts; the
+ * caller should still be prepared for a 23505 unique-violation
+ * if a parallel insert wins the race.
+ */
+async function generateUniqueReferralCode(supabase, maxAttempts = 8) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const code = generateReferralCode();
+    const { count } = await supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true })
+      .eq('referral_code', code);
+    if (!count) return code;
+  }
+  throw new Error(`Could not generate unique referral code after ${maxAttempts} attempts`);
+}
+
+module.exports = {
+  generateSlug,
+  buildReferralLink,
+  generateReferralCode,
+  generateUniqueReferralCode,
+  normalizeCode,
+};

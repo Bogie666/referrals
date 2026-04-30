@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../db');
-const { generateSlug, buildReferralLink, generateReferralCode } = require('../utils/slugs');
+const { generateSlug, buildReferralLink, generateUniqueReferralCode, normalizeCode } = require('../utils/slugs');
 const { calculatePayout } = require('../utils/payout');
 const { sendReferralInvite } = require('../services/chiirp');
 
@@ -149,10 +149,11 @@ async function handleNewBooking(payload) {
     const customerPhone = normalizePhone(payload.customerPhone || payload.customer?.phone || '');
 
     // Find the referrer by slug or referral_code
+    const normalizedCode = normalizeCode(referralSlug);
     const { data: customer } = await supabase
       .from('customers')
       .select('id')
-      .or(`referral_slug.eq.${referralSlug},referral_code.eq.${referralSlug}`)
+      .or(`referral_slug.eq.${referralSlug},referral_code.eq.${normalizedCode}`)
       .single();
 
     if (!customer) {
@@ -208,7 +209,7 @@ async function getOrCreateCustomer({ stCustomerId, name, phone, email }) {
 
   const slug = generateSlug(name);
   const referralLink = buildReferralLink(slug);
-  const referralCode = generateReferralCode();
+  const referralCode = await generateUniqueReferralCode(supabase);
 
   const { data: created, error } = await supabase
     .from('customers')

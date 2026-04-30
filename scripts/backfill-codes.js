@@ -5,18 +5,13 @@
  * Usage: node scripts/backfill-codes.js
  */
 require('dotenv').config();
-const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { generateUniqueReferralCode } = require('../src/utils/slugs');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
-
-function generateReferralCode() {
-  const hex = crypto.randomBytes(4).toString('hex').toUpperCase();
-  return hex.slice(0, 4) + '-' + hex.slice(4);
-}
 
 async function main() {
   const { data: customers, error } = await supabase
@@ -32,7 +27,7 @@ async function main() {
   console.log(`Found ${customers.length} customers without referral codes`);
 
   for (const customer of customers) {
-    const code = generateReferralCode();
+    const code = await generateUniqueReferralCode(supabase);
     const { error: updateErr } = await supabase
       .from('customers')
       .update({ referral_code: code })

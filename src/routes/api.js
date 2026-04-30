@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../db');
 const { DEFAULTS: PAYOUT_DEFAULTS } = require('../utils/payout');
+const { normalizeCode } = require('../utils/slugs');
 
 async function getPortalPayoutInfo() {
   const { data } = await supabase
@@ -28,12 +29,13 @@ async function getPortalPayoutInfo() {
 // ──────────────────────────────────────────────────────────────
 router.get('/referral/:slugOrCode', async (req, res) => {
   const { slugOrCode } = req.params;
+  const normalized = normalizeCode(slugOrCode);
 
   const [{ data: customer, error }, payoutInfo] = await Promise.all([
     supabase
       .from('customers')
       .select('id, name, referral_slug, referral_code, referral_link, total_referrals')
-      .or('referral_slug.eq.' + slugOrCode + ',referral_code.eq.' + slugOrCode.toUpperCase())
+      .or(`referral_slug.eq.${slugOrCode},referral_code.eq.${normalized}`)
       .single(),
     getPortalPayoutInfo(),
   ]);
@@ -62,11 +64,12 @@ router.get('/referral/:slugOrCode', async (req, res) => {
 router.post('/referral/click', async (req, res) => {
   const { slug } = req.body;
   if (!slug) return res.status(400).json({ error: 'Missing slug' });
+  const normalized = normalizeCode(slug);
 
   const { data: customer } = await supabase
     .from('customers')
     .select('id')
-    .or('referral_slug.eq.' + slug + ',referral_code.eq.' + slug.toUpperCase())
+    .or(`referral_slug.eq.${slug},referral_code.eq.${normalized}`)
     .single();
 
   if (!customer) return res.status(404).json({ error: 'Invalid referral link' });
@@ -172,7 +175,7 @@ router.post('/portal/lookup', async (req, res) => {
   console.log(`[Portal] ${normalized} not in local DB — checking ServiceTitan`);
 
   const { findCustomerByPhone, getCompletedJobCount, extractContactInfo } = require('../services/servicetitan');
-  const { generateSlug, buildReferralLink, generateReferralCode } = require('../utils/slugs');
+  const { generateSlug, buildReferralLink, generateUniqueReferralCode } = require('../utils/slugs');
 
   let stCustomer;
   try {
@@ -213,7 +216,7 @@ router.post('/portal/lookup', async (req, res) => {
 
   const slug = generateSlug(contact.name);
   const referralLink = buildReferralLink(slug);
-  const referralCode = generateReferralCode();
+  const referralCode = await generateUniqueReferralCode(supabase);
 
   const { data: newCustomer, error: insertErr } = await supabase
     .from('customers')
