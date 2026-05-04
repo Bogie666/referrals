@@ -263,7 +263,7 @@ async function processJob(job, token, payoutSettings, results) {
     return;
   }
 
-  await sendChiirpInvite({ name, phone, referralCode, referralLink, customerId: dbCustomer?.id });
+  await sendChiirpInvite({ name, phone, email, referralCode, referralLink, customerId: dbCustomer?.id });
   results.textsSent++;
 }
 
@@ -384,7 +384,7 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
 }
 
 // ── Send Chiirp webhook ───────────────────────────────────────
-async function sendChiirpInvite({ name, phone, referralCode, referralLink, customerId }) {
+async function sendChiirpInvite({ name, phone, email, referralCode, referralLink, customerId }) {
   if (!CHIIRP_WEBHOOK) {
     console.warn('[Poller] CHIIRP_WEBHOOK_URL not set — skipping text');
     return;
@@ -397,6 +397,7 @@ async function sendChiirpInvite({ name, phone, referralCode, referralLink, custo
   const payload = {
     first_name:    firstName,
     phone:         formattedPhone,
+    email:         email || '',
     referral_code: referralCode,
     referral_link: referralLink,
   };

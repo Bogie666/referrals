@@ -42,7 +42,7 @@ async function sendText({ to, message, customerId = null, referralId = null, web
  * Posts customer data to the Chiirp webhook — Chiirp handles the text content.
  */
 async function sendReferralInvite(customer) {
-  const { name, phone, referral_link, referral_code, id: customerId } = customer;
+  const { name, phone, email, referral_link, referral_code, id: customerId } = customer;
   const firstName = name.split(' ')[0];
 
   const message = `Referral invite triggered for ${firstName}`;
@@ -52,7 +52,8 @@ async function sendReferralInvite(customer) {
     message,
     customerId,
     webhookData: {
-      first_name: firstName,
+      first_name:    firstName,
+      email:         email || '',
       referral_code: referral_code || '',
       referral_link: referral_link || '',
     },
@@ -74,9 +75,10 @@ async function sendRewardNotification(customer, referredName, amount, paymentMet
     message,
     customerId: customer.id,
     webhookData: {
-      first_name: firstName,
-      referred_name: referredFirst,
-      reward_amount: String(amount),
+      first_name:     firstName,
+      email:          customer.email || '',
+      referred_name:  referredFirst,
+      reward_amount:  String(amount),
       payment_method: paymentMethod,
     },
   });
