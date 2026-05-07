@@ -10,10 +10,13 @@ const axios = require('axios');
 
 const ST_AUTH_URL   = 'https://auth.servicetitan.io/connect/token';
 const ST_API_BASE   = 'https://api.servicetitan.io';
-const APP_KEY       = process.env.ST_APP_KEY  || process.env.ST_APP_ID;
-const TENANT_ID     = process.env.ST_TENANT_ID;
-const CLIENT_ID     = process.env.ST_CLIENT_ID;
-const CLIENT_SECRET = process.env.ST_CLIENT_SECRET;
+// Trim env vars defensively — copy-paste sometimes pulls in a trailing
+// newline or stray whitespace, which Node refuses to put in HTTP headers.
+const cleanEnv = (v) => (v == null ? v : String(v).trim());
+const APP_KEY       = cleanEnv(process.env.ST_APP_KEY) || cleanEnv(process.env.ST_APP_ID);
+const TENANT_ID     = cleanEnv(process.env.ST_TENANT_ID);
+const CLIENT_ID     = cleanEnv(process.env.ST_CLIENT_ID);
+const CLIENT_SECRET = cleanEnv(process.env.ST_CLIENT_SECRET);
 
 // ── Token cache ───────────────────────────────────────────────
 let cachedToken    = null;
