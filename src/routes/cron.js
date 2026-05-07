@@ -390,12 +390,15 @@ async function sendChiirpInvite({ name, phone, email, referralCode, referralLink
     return;
   }
 
-  const firstName = name.split(' ')[0];
+  const nameParts = (name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || '';
+  const lastName  = nameParts.slice(1).join(' ');
   // Format phone with country code for Chiirp
   const formattedPhone = phone.length === 10 ? `1${phone}` : phone;
 
   const payload = {
     first_name:    firstName,
+    last_name:     lastName,
     phone:         formattedPhone,
     email:         email || '',
     referral_code: referralCode,

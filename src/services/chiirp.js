@@ -43,7 +43,9 @@ async function sendText({ to, message, customerId = null, referralId = null, web
  */
 async function sendReferralInvite(customer) {
   const { name, phone, email, referral_link, referral_code, id: customerId } = customer;
-  const firstName = name.split(' ')[0];
+  const nameParts = (name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || '';
+  const lastName  = nameParts.slice(1).join(' ');
 
   const message = `Referral invite triggered for ${firstName}`;
 
@@ -53,6 +55,7 @@ async function sendReferralInvite(customer) {
     customerId,
     webhookData: {
       first_name:    firstName,
+      last_name:     lastName,
       email:         email || '',
       referral_code: referral_code || '',
       referral_link: referral_link || '',
@@ -65,7 +68,9 @@ async function sendReferralInvite(customer) {
  * Posts data to the Chiirp webhook — Chiirp handles the text content.
  */
 async function sendRewardNotification(customer, referredName, amount, paymentMethod) {
-  const firstName = customer.name.split(' ')[0];
+  const nameParts = (customer.name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || '';
+  const lastName  = nameParts.slice(1).join(' ');
   const referredFirst = (referredName || 'your friend').split(' ')[0];
 
   const message = `Reward notification triggered for ${firstName}`;
@@ -76,6 +81,7 @@ async function sendRewardNotification(customer, referredName, amount, paymentMet
     customerId: customer.id,
     webhookData: {
       first_name:     firstName,
+      last_name:      lastName,
       email:          customer.email || '',
       referred_name:  referredFirst,
       reward_amount:  String(amount),
