@@ -125,6 +125,21 @@ async function getTopReferrers(limit = 10) {
 }
 
 /**
+ * All customers, newest first. Used by the admin Customers tab so
+ * staff can look anyone up — including customers who've been enrolled
+ * but haven't yet had a referral come back.
+ */
+async function getAllCustomers(limit = 500) {
+  const { data } = await supabase
+    .from('customers')
+    .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  return data || [];
+}
+
+/**
  * Recent activity feed.
  */
 async function getRecentActivity(limit = 20) {
@@ -202,6 +217,6 @@ async function getAdminUsers() {
 }
 
 module.exports = {
-  getStats, getReferrals, getPayoutForReferral, getTopReferrers,
+  getStats, getReferrals, getPayoutForReferral, getTopReferrers, getAllCustomers,
   getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers,
 };

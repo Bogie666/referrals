@@ -23,6 +23,14 @@ function formatCurrency(n) {
   return '$' + (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+function formatPhone(raw) {
+  if (!raw) return '—';
+  const d = String(raw).replace(/\D/g, '');
+  if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+  if (d.length === 11 && d[0] === '1') return `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
+  return raw;
+}
+
 function formatDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -89,7 +97,7 @@ function renderLogin(error = '') {
 </html>`;
 }
 
-function renderDashboard({ stats, referrals, topReferrers, recentActivity, monthlyTrend, settings, adminUsers, activeTab = 'overview' }) {
+function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentActivity, monthlyTrend, settings, adminUsers, activeTab = 'overview' }) {
   const navItems = [
     { id: 'overview',   label: 'Overview',       href: '/admin' },
     { id: 'referrals',  label: 'Referrals',      href: '/admin/referrals' },
@@ -686,7 +694,7 @@ function renderDashboard({ stats, referrals, topReferrers, recentActivity, month
 
   ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) : ''}
   ${activeTab === 'referrals' ? renderReferralsTab(referrals) : ''}
-  ${activeTab === 'customers' ? renderReferrersTab(topReferrers) : ''}
+  ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || []) : ''}
   ${activeTab === 'activity'  ? renderActivityTab(recentActivity) : ''}
   ${activeTab === 'portal'    ? renderPortalTab() : ''}
   ${activeTab === 'settings'  ? renderSettingsTab(settings || {}, adminUsers || []) : ''}
@@ -1243,55 +1251,149 @@ function renderReferralsTab(referrals) {
   `;
 }
 
-function renderReferrersTab(topReferrers) {
+function renderReferrersTab(topReferrers, allCustomers) {
+  const customers = allCustomers || [];
   return `
     <div class="page-header">
-      <h2>Top Referrers</h2>
-      <p>Customers who have successfully referred others</p>
+      <h2>Customers</h2>
+      <p>All enrolled customers — search by name, phone, email, or referral code</p>
     </div>
+
+    ${topReferrers.length > 0 ? `
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-header"><h3>Top Referrers</h3></div>
+        <div class="card-body table-wrap">
+          <table>
+            <thead><tr>
+              <th>#</th>
+              <th>Customer</th>
+              <th>Referrals</th>
+              <th>Total Earned</th>
+              <th>Code</th>
+            </tr></thead>
+            <tbody>
+              ${topReferrers.map((c, i) => `
+                <tr>
+                  <td style="font-weight:700; color:var(--muted);">${i + 1}</td>
+                  <td>
+                    <div class="td-name">${c.name}</div>
+                    <div class="td-sub">${c.phone || c.email || ''}</div>
+                  </td>
+                  <td><span style="font-weight:700;font-size:16px;">${c.total_referrals}</span></td>
+                  <td style="font-weight:600;color:var(--green);">${formatCurrency(c.total_rewards)}</td>
+                  <td>${c.referral_code ? `<code style="font-size:12px;background:var(--code-bg);padding:3px 8px;border-radius:4px;font-weight:600;">${c.referral_code}</code>` : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ` : ''}
+
     <div class="card">
+      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <h3>All Customers <span style="color:var(--muted);font-weight:500;font-size:13px;" id="customers-count">(${customers.length})</span></h3>
+        <input
+          type="search"
+          id="customers-search"
+          placeholder="Search name, phone, email, or code..."
+          style="
+            padding:8px 14px; border:1px solid var(--border); border-radius:8px;
+            font-size:13px; width:280px; max-width:100%;
+            background:var(--input-bg); color:var(--text); outline:none;
+          "
+          oninput="filterCustomers(this.value)"
+        />
+      </div>
       <div class="card-body table-wrap">
-        <table>
+        <table id="customers-table">
           <thead><tr>
-            <th>#</th>
             <th>Customer</th>
-            <th>Referrals</th>
-            <th>Total Earned</th>
-            <th>Referral Link</th>
+            <th>Phone</th>
+            <th>Email</th>
             <th>Code</th>
-            <th>Member Since</th>
+            <th>Link</th>
+            <th>Referrals</th>
+            <th>Earned</th>
+            <th>Enrolled</th>
           </tr></thead>
-          <tbody>
-            ${topReferrers.map((c, i) => `
-              <tr>
-                <td style="font-weight:700; color:var(--muted);">${i + 1}</td>
+          <tbody id="customers-tbody">
+            ${customers.map(c => {
+              const haystack = [c.name, c.phone, c.email, c.referral_code, c.st_customer_id]
+                .filter(Boolean).join(' ').toLowerCase().replace(/"/g, '&quot;');
+              return `
+              <tr data-search="${haystack}">
                 <td>
                   <div class="td-name">${c.name}</div>
-                  <div class="td-sub">${c.phone || c.email || ''}</div>
+                  ${c.st_customer_id ? `<div class="td-sub">ST: ${c.st_customer_id}</div>` : ''}
                 </td>
-                <td><span style="font-weight:700;font-size:16px;">${c.total_referrals}</span></td>
-                <td style="font-weight:600;color:var(--green);">${formatCurrency(c.total_rewards)}</td>
+                <td style="white-space:nowrap;">${formatPhone(c.phone)}</td>
+                <td>${c.email || '—'}</td>
                 <td>
-                  <code style="font-size:12px;background:var(--code-bg);padding:3px 8px;border-radius:4px;">
-                    ${c.referral_link}
-                  </code>
+                  ${c.referral_code ? `
+                    <span style="display:inline-flex;align-items:center;gap:6px;">
+                      <code style="font-size:12px;background:var(--code-bg);padding:3px 8px;border-radius:4px;font-weight:600;">${c.referral_code}</code>
+                      <button type="button" onclick="copyToClipboard('${c.referral_code}', this)"
+                              style="background:none;border:0;cursor:pointer;font-size:12px;color:var(--muted);"
+                              title="Copy code">📋</button>
+                    </span>` : '—'}
                 </td>
                 <td>
-                  ${c.referral_code ? `<code style="font-size:12px;background:var(--code-bg);padding:3px 8px;border-radius:4px;font-weight:600;">${c.referral_code}</code>` : '—'}
+                  ${c.referral_link ? `
+                    <button type="button" onclick="copyToClipboard('${c.referral_link.replace(/'/g, "\\'")}', this)"
+                            style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px;color:var(--text);"
+                            title="Copy link">Copy link</button>` : '—'}
                 </td>
-                <td style="color:var(--muted);">${formatDate(c.created_at)}</td>
+                <td style="text-align:center;">${c.total_referrals || 0}</td>
+                <td style="font-weight:600;color:${c.total_rewards > 0 ? 'var(--green)' : 'var(--muted)'};">${formatCurrency(c.total_rewards || 0)}</td>
+                <td style="color:var(--muted);white-space:nowrap;">${formatDate(c.created_at)}</td>
               </tr>
-            `).join('') || `
-              <tr><td colspan="7">
-                <div class="empty-state">
-                  <p>No referrers yet</p>
-                </div>
+            `;
+            }).join('') || `
+              <tr><td colspan="8">
+                <div class="empty-state"><p>No customers yet — they'll appear here as soon as the poller enrolls them.</p></div>
               </td></tr>
             `}
           </tbody>
         </table>
+        <div id="customers-empty" style="display:none; padding:40px 20px; text-align:center; color:var(--muted);">
+          No customers match your search.
+        </div>
       </div>
     </div>
+
+    <script>
+      function filterCustomers(query) {
+        var q = (query || '').trim().toLowerCase();
+        var rows = document.querySelectorAll('#customers-tbody tr');
+        var visible = 0;
+        rows.forEach(function(row) {
+          var hay = row.getAttribute('data-search') || '';
+          var match = !q || hay.indexOf(q) !== -1;
+          row.style.display = match ? '' : 'none';
+          if (match) visible++;
+        });
+        var emptyEl = document.getElementById('customers-empty');
+        var tableEl = document.getElementById('customers-table');
+        if (rows.length > 0 && visible === 0) {
+          emptyEl.style.display = 'block';
+          tableEl.style.display = 'none';
+        } else {
+          emptyEl.style.display = 'none';
+          tableEl.style.display = '';
+        }
+        document.getElementById('customers-count').textContent = q ? '(' + visible + ' of ' + rows.length + ')' : '(' + rows.length + ')';
+      }
+      function copyToClipboard(text, btn) {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(function() {
+            var original = btn.textContent;
+            btn.textContent = '✓';
+            setTimeout(function() { btn.textContent = original; }, 1200);
+          });
+        }
+      }
+    </script>
   `;
 }
 

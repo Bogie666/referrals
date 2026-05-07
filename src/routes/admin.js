@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAdmin, requireSuperAdmin, createSession, destroySession, authenticateUser, hashPassword } = require('../middleware/adminAuth');
-const { getStats, getReferrals, getTopReferrers, getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers } = require('../services/adminData');
+const { getStats, getReferrals, getTopReferrers, getAllCustomers, getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers } = require('../services/adminData');
 const { renderLogin, renderDashboard } = require('../views/dashboard');
 const { sendRewardNotification } = require('../services/chiirp');
 const supabase = require('../db');
@@ -100,8 +100,11 @@ router.get('/referrals', requireAdmin, async (req, res) => {
 // ──────────────────────────────────────────────────────────────
 router.get('/referrers', requireAdmin, async (req, res) => {
   try {
-    const data = await loadDashboardData();
-    res.send(renderDashboard({ ...data, activeTab: 'customers' }));
+    const [data, allCustomers] = await Promise.all([
+      loadDashboardData(),
+      getAllCustomers(500),
+    ]);
+    res.send(renderDashboard({ ...data, allCustomers, activeTab: 'customers' }));
   } catch (err) {
     console.error('[Admin] Referrers error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
