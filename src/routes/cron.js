@@ -37,7 +37,10 @@ const PAYOUT_SETTING_KEYS = [
   'min_job_value',
   'payout_percentage',
   'payout_cap',
+  'max_lookback_hours',
 ];
+
+const DEFAULT_MAX_LOOKBACK_HOURS = 24;
 
 async function loadPayoutSettings() {
   const { data } = await supabase
@@ -85,26 +88,35 @@ router.get('/poll-jobs', verifyCronAuth, async (req, res) => {
   };
 
   try {
-    // ── Determine lookback window ──────────────────────────────
-    // Use last_polled_at from DB if available, otherwise 2 hours ago.
-    const { data: pollState } = await supabase
-      .from('poll_state')
-      .select('last_polled_at')
-      .eq('id', 'jobs')
-      .single();
+    // ── Load settings + poll cursor ───────────────────────────
+    const [{ data: pollState }, payoutSettings] = await Promise.all([
+      supabase.from('poll_state').select('last_polled_at').eq('id', 'jobs').single(),
+      loadPayoutSettings(),
+    ]);
 
-    const lookbackMs = 2 * 60 * 60 * 1000; // 2 hours
-    const since = pollState?.last_polled_at
-      ? new Date(pollState.last_polled_at)
-      : new Date(Date.now() - lookbackMs);
+    // ── Determine lookback window ──────────────────────────────
+    // Start from poll_state.last_polled_at when available, otherwise
+    // a 2-hour fallback. Cap at max_lookback_hours so a frozen cursor
+    // can't accidentally drain weeks of historical jobs.
+    const fallbackMs = 2 * 60 * 60 * 1000;
+    const maxLookbackHours = parseFloat(payoutSettings.max_lookback_hours) || DEFAULT_MAX_LOOKBACK_HOURS;
+    const earliestAllowed = Date.now() - maxLookbackHours * 60 * 60 * 1000;
+
+    const cursorTime = pollState?.last_polled_at
+      ? new Date(pollState.last_polled_at).getTime()
+      : Date.now() - fallbackMs;
+
+    const sinceMs = Math.max(cursorTime, earliestAllowed);
+    const since = new Date(sinceMs);
+
+    if (cursorTime < earliestAllowed) {
+      console.warn(`[Poller] Cursor ${new Date(cursorTime).toISOString()} is older than max_lookback_hours (${maxLookbackHours}h) — clamping to ${since.toISOString()}`);
+    }
 
     console.log(`[Poller] Starting poll — jobs completed since: ${since.toISOString()}`);
 
     // ── Get access token ───────────────────────────────────────
     const token = await getAccessToken();
-
-    // ── Load payout settings (admin-editable) ──────────────────
-    const payoutSettings = await loadPayoutSettings();
 
     // ── Fetch completed jobs ───────────────────────────────────
     const jobs = await getCompletedJobs(token, since.toISOString());

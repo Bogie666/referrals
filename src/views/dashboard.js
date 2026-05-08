@@ -1462,6 +1462,13 @@ function renderSettingsTab(settings, adminUsers) {
             <label>New Customer Discount ($)</label>
             <input type="number" id="setting-new-customer-discount" value="${settings.new_customer_discount || '50'}" step="1" min="0" />
           </div>
+          <div class="form-group">
+            <label>Max Poll Lookback (hours)</label>
+            <input type="number" id="setting-max-lookback-hours" value="${settings.max_lookback_hours || '24'}" step="1" min="1" max="168" />
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">
+              Hard cap on how far back the poller can reach. Protects against a stale cursor accidentally enrolling old customers.
+            </div>
+          </div>
         </div>
         <button type="submit" class="btn-save" id="settings-save-btn">Save Settings</button>
       </form>
@@ -1562,6 +1569,7 @@ function renderSettingsTab(settings, adminUsers) {
         payout_cap:            document.getElementById('setting-payout-cap').value,
         min_job_value:         document.getElementById('setting-min-job-value').value,
         new_customer_discount: document.getElementById('setting-new-customer-discount').value,
+        max_lookback_hours:    document.getElementById('setting-max-lookback-hours').value,
       };
 
       try {
