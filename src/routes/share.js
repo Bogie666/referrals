@@ -31,7 +31,7 @@ async function loadDiscount() {
 }
 
 function buildSmsBody({ firstName, code, link, discount }) {
-  return `Hey, if you ever need HVAC, plumbing, or electrical work in DFW, LEX is who we use and they're solid. ` +
+  return `Hey, if you ever need HVAC, plumbing, or electrical work in DFW, we use LEX and they're solid. ` +
        `$${discount} off your first service with my link: ${link}`;
 }
 
