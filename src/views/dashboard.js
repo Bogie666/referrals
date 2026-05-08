@@ -101,7 +101,7 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
   const navItems = [
     { id: 'overview',   label: 'Overview',       href: '/admin' },
     { id: 'referrals',  label: 'Referrals',      href: '/admin/referrals' },
-    { id: 'customers',  label: 'Top Referrers',  href: '/admin/referrers' },
+    { id: 'customers',  label: 'Customers',      href: '/admin/referrers' },
     { id: 'activity',   label: 'Activity',       href: '/admin/activity' },
     { id: 'portal',     label: 'Portal Preview', href: '/admin/portal' },
     { id: 'settings',   label: 'Settings',       href: '/admin/settings' },
