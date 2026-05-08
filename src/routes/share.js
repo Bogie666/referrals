@@ -31,8 +31,8 @@ async function loadDiscount() {
 }
 
 function buildSmsBody({ firstName, code, link, discount }) {
-  return `Hey! I use LEX Air for HVAC, plumbing & electrical in DFW — really good. ` +
-         `Use my code ${code} to save $${discount} on your first service: ${link}`;
+  return `Hey, if you ever need HVAC, plumbing, or electrical work in DFW, LEX is who we use and they're solid. ` +
+       `$${discount} off your first service with my link: ${link}`;
 }
 
 function buildEmailSubject({ firstName }) {
