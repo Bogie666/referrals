@@ -112,9 +112,13 @@ function renderSharePage({ firstName, code, link, discount, smsBody, emailSubjec
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="robots" content="noindex" />
+  <<meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#1d3a6e" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="LEXPerks — Share Your Referral" />
+  <meta property="og:description" content="Send your LEX referral to a friend in one tap." />
+  <meta name="twitter:card" content="summary" />
   <title>Share Your LEX Referral</title>
-  <link rel="icon" href="${LEX_LOGO}" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
