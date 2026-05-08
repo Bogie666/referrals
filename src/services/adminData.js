@@ -130,12 +130,16 @@ async function getTopReferrers(limit = 10) {
  * but haven't yet had a referral come back.
  */
 async function getAllCustomers(limit = 500) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('customers')
     .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, created_at')
     .order('created_at', { ascending: false })
     .limit(limit);
 
+  if (error) {
+    console.error('[adminData] getAllCustomers failed:', error.message, error.details || '');
+    return [];
+  }
   return data || [];
 }
 
