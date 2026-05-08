@@ -22,8 +22,10 @@
 if (!defined('ABSPATH')) exit;
 
 // ── Config ────────────────────────────────────────────────────
-// Your Vercel referral app URL — no trailing slash
-define('LEX_API_URL',    'https://referrals-kappa.vercel.app');
+// Your Vercel referral app URL — no trailing slash.
+// Use the production custom domain so portal lookups don't need to
+// jump cross-origin between the auto-generated *.vercel.app URL.
+define('LEX_API_URL',    'https://lexperks.com');
 
 // Your referral domain
 define('LEX_PERKS_URL',  'https://lexperks.com');
