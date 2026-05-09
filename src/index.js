@@ -29,16 +29,28 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
-// ── Security: relax CSP so Chart.js CDN works in admin dashboard
+// ── Security: relax CSP so admin Chart.js, customer portal fonts/QR,
+//    and the LEX scheduler widget all load. Scheduler is hosted at
+//    scheduler-mu-three.vercel.app (script + CSS) and posts bookings to
+//    the same origin.
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "cdnjs.cloudflare.com"],
+      scriptSrc: [
+        "'self'", "'unsafe-inline'",
+        "cdnjs.cloudflare.com", "cdn.jsdelivr.net",
+        "https://scheduler-mu-three.vercel.app",
+      ],
       scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: [
+        "'self'", "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+        "https://scheduler-mu-three.vercel.app",
+      ],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "https://www.lexairconditioning.com"],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", "https://scheduler-mu-three.vercel.app"],
     },
   },
 }));
@@ -72,7 +84,7 @@ app.use('/admin', adminRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/book', bookRoute);
 app.use('/referral', referralRoute);
-app.use('/share', shareRoute);
+app.use(shareRoute);  // mounts /share/:code AND /my-referrals at root
 
 // ── Health check ──
 app.get('/health', (req, res) => {
