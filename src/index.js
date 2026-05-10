@@ -91,8 +91,9 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', app: 'LEX Referral App', timestamp: new Date().toISOString() });
 });
 
-// ── Root redirect ──
-app.get('/', (req, res) => res.redirect('/admin'));
+// ── Root redirect — bare lexperks.com goes to the customer portal.
+//    Admin access is at /admin (separate URL, separate auth).
+app.get('/', (req, res) => res.redirect('/my-referrals'));
 
 // ── 404 ──
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
