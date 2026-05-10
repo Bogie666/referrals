@@ -1470,6 +1470,27 @@ function renderSettingsTab(settings, adminUsers) {
             </div>
           </div>
         </div>
+
+        <h4 style="font-family:'Montserrat',sans-serif; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin:18px 0 10px; padding-top:14px; border-top:1px solid var(--border);">Re-engagement Drip</h4>
+        <div class="form-row">
+          <div class="form-group" style="flex:1 1 100%;">
+            <label>Re-engagement Schedule (days after enrollment)</label>
+            <input type="text" id="setting-reengage-days" value="${(settings.reengage_days || '').replace(/"/g, '&quot;')}" placeholder="e.g. 7, 14, 30 — leave empty to disable" />
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">
+              Comma-separated list of days. The daily cron fires a Chiirp webhook at each interval for enrolled customers who haven't shared yet, with an <code>event</code> field like <code>reengage_day_7</code>. Filter on that field in your Chiirp campaign. Empty disables.
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Re-engagement Max Age (days)</label>
+            <input type="number" id="setting-reengage-max-age-days" value="${settings.reengage_max_age_days || '90'}" step="1" min="1" max="365" />
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">
+              Don't re-engage customers enrolled more than this many days ago. Protects against blasting old customers when you turn the drip on.
+            </div>
+          </div>
+        </div>
+
         <button type="submit" class="btn-save" id="settings-save-btn">Save Settings</button>
       </form>
     </div>
@@ -1570,6 +1591,8 @@ function renderSettingsTab(settings, adminUsers) {
         min_job_value:         document.getElementById('setting-min-job-value').value,
         new_customer_discount: document.getElementById('setting-new-customer-discount').value,
         max_lookback_hours:    document.getElementById('setting-max-lookback-hours').value,
+        reengage_days:         document.getElementById('setting-reengage-days').value,
+        reengage_max_age_days: document.getElementById('setting-reengage-max-age-days').value,
       };
 
       try {
