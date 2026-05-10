@@ -496,13 +496,19 @@ function renderAuthScript({ customer, settings }) {
 const FIRST_NAME = '${escapeJsString(firstName)}';
 const CODE       = '${escapeJsString(code)}';
 const LINK       = '${escapeJsString(link)}';
+// SMS apps (iOS Messages + Google Messages) auto-attach a duplicate
+// of any URL ending the body when sent via sms: deeplinks. Stripping
+// https:// breaks that auto-detect heuristic — the recipient still
+// sees a tappable link (modern messaging apps auto-link bare
+// domain.com paths) but the URL only goes through once.
+const SHORT_LINK = LINK.replace(/^https?:\\/\\//, '');
 const DISCOUNT   = ${discount};
 
 const VARIANTS = {
-  casual:  \`Hey, if you ever need HVAC, plumbing, or electrical work in DFW, we use LEX and they're solid. \$\${DISCOUNT} off your first service with my link: \${LINK}\`,
-  urgent:  \`If your AC is on the fritz, save yourself the headache and call LEX. They came out same-day for us, fixed it cleanly. Use my link for \$\${DISCOUNT} off: \${LINK}\`,
-  newhome: \`Congrats on the house! When you're lining up service pros, LEX has been our HVAC, plumbing, and electrical for years. \$\${DISCOUNT} off your first call with my link: \${LINK}\`,
-  pro:     \`Recommending LEX Air Conditioning for any HVAC, plumbing, or electrical needs in DFW. They've been excellent for us. Use my referral link for \$\${DISCOUNT} off your first service: \${LINK}\`,
+  casual:  \`Hey, if you ever need HVAC, plumbing, or electrical work in DFW, we use LEX and they're solid. \$\${DISCOUNT} off your first service with my link: \${SHORT_LINK}\`,
+  urgent:  \`If your AC is on the fritz, save yourself the headache and call LEX. They came out same-day for us, fixed it cleanly. Use my link for \$\${DISCOUNT} off: \${SHORT_LINK}\`,
+  newhome: \`Congrats on the house! When you're lining up service pros, LEX has been our HVAC, plumbing, and electrical for years. \$\${DISCOUNT} off your first call with my link: \${SHORT_LINK}\`,
+  pro:     \`Recommending LEX Air Conditioning for any HVAC, plumbing, or electrical needs in DFW. They've been excellent for us. Use my referral link for \$\${DISCOUNT} off your first service: \${SHORT_LINK}\`,
 };
 
 const SUBJECTS = {
@@ -531,7 +537,7 @@ function setStyle(style) {
 function rebuildShareLinks() {
   const body = VARIANTS[currentStyle];
   const subj = SUBJECTS[currentStyle];
-  document.getElementById('share-sms').href   = 'sms:?&body=' + encodeURIComponent(body);
+  document.getElementById('share-sms').href   = 'sms:?body=' + encodeURIComponent(body);
   document.getElementById('share-email').href = 'mailto:?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body);
 }
 

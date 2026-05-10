@@ -323,7 +323,7 @@ function renderLandingPage({ customer, settings }) {
     <strong style="color:var(--navy);">LEX Air Conditioning, Heating, Plumbing &amp; Electrical</strong><br>
     Family-owned · Serving DFW since 2004<br>
     <a href="tel:${LEX_PHONE_TEL}">${LEX_PHONE}</a> · <a href="https://lexairconditioning.com">lexairconditioning.com</a><br>
-    <span class="footer-license">TACLA #87932 · TECL #29981 · M-39872</span>
+    <span class="footer-license">TACLA38788C · TECL23192 · M18088</span>
   </p>
 </div>
 
