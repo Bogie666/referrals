@@ -242,10 +242,10 @@ ${mode === 'auth' ? '<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@
 <body>
 
 <div class="topbar">
-  <div class="topbar-brand">
+  <a class="topbar-brand" href="https://www.lexairconditioning.com" aria-label="LEX Air Conditioning home">
     <img class="logo-mark" src="${LEX_MASCOT_URL}" alt="LEX" />
     <div class="wordmark">LEX<span>PERKS</span></div>
-  </div>
+  </a>
   <a href="tel:9724661917" class="call-link">📞 ${LEX_PHONE}</a>
 </div>
 
@@ -439,7 +439,8 @@ function renderAuthBody({ settings, customer, referrals, stats }) {
 
   <p class="footer-strip">
     Questions? Call <a href="tel:9724661917">${LEX_PHONE}</a><br>
-    LEX Air Conditioning · Family-owned, serving DFW since 2004
+    LEX Air Conditioning · Family-owned, serving DFW since 2004<br>
+    <button type="button" onclick="signOut()" style="background:none; border:0; padding:8px 0 0; margin-top:8px; color:var(--slate-500); font-size:11px; font-family:inherit; cursor:pointer; text-decoration:underline;">Sign out / use a different number</button>
   </p>
 </div>`;
 }
@@ -592,6 +593,12 @@ function toggleQR() {
   }
 }
 
+function signOut() {
+  try { localStorage.removeItem('lex_customer'); } catch (e) {}
+  // ?logout=1 keeps /my-referrals from auto-resuming back into this account
+  window.location.href = '/my-referrals?logout=1';
+}
+
 // Init: render the casual preview & wire up share links
 setStyle('casual');
 `;
@@ -599,6 +606,19 @@ setStyle('casual');
 
 function renderLookupScript() {
   return `
+// Auto-redirect to the saved customer's portal, if remembered.
+// We only set this key after a successful phone lookup, so it's
+// device-confirmed. The ?logout=1 query param skips the redirect
+// so the user can re-enter their number after signing out.
+(function autoResume() {
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('logout') === '1') return;
+    var saved = localStorage.getItem('lex_customer');
+    if (saved) window.location.replace('/share/' + encodeURIComponent(saved));
+  } catch (e) {}
+})();
+
 const phoneInput = document.getElementById('lookup-phone');
 const errorEl    = document.getElementById('lookup-error');
 const btn        = document.getElementById('lookup-btn');
@@ -657,7 +677,9 @@ async function doLookup() {
       return;
     }
 
-    // Success — redirect to /share/CODE so the URL is bookmarkable
+    // Success — remember the device-confirmed customer for next time,
+    // then redirect to /share/CODE so the URL is bookmarkable.
+    try { localStorage.setItem('lex_customer', data.referralCode); } catch (e) {}
     window.location.href = '/share/' + encodeURIComponent(data.referralCode);
   } catch (err) {
     showError('Network error. Please try again.');
@@ -700,8 +722,13 @@ a.btn { display:inline-block; padding:12px 22px;
   <p>We couldn't find a referral code matching <strong>${safe || '—'}</strong>.
      Double-check the link from your text, or look up your account.</p>
   <a class="btn" href="tel:9724661917">📞 Call ${LEX_PHONE}</a>
-  <a class="alt" href="/my-referrals">Look up by phone instead →</a>
+  <a class="alt" href="/my-referrals?logout=1">Look up by phone instead →</a>
 </div>
+<script>
+// If we're on the not-found page, the saved code is stale — clear it
+// so /my-referrals doesn't auto-resume back into this 404.
+try { localStorage.removeItem('lex_customer'); } catch (e) {}
+</script>
 </body>
 </html>`;
 }
@@ -755,7 +782,12 @@ body {
   position: sticky; top: 0; z-index: 50;
   box-shadow: var(--shadow-md);
 }
-.topbar-brand { display: flex; align-items: center; gap: 10px; }
+.topbar-brand {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
 .topbar-brand .logo-mark {
   width: 36px; height: 36px;
   border-radius: 50%;

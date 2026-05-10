@@ -142,10 +142,10 @@ function renderLandingPage({ customer, settings }) {
 <body>
 
 <div class="topbar">
-  <div class="topbar-brand">
+  <a class="topbar-brand" href="https://www.lexairconditioning.com" aria-label="LEX Air Conditioning home">
     <img class="logo-mark" src="${LEX_MASCOT_URL}" alt="LEX" />
     <div class="wordmark">LEX <span>AIR</span></div>
-  </div>
+  </a>
   <a href="tel:${LEX_PHONE_TEL}" class="call-link">📞 ${LEX_PHONE}</a>
 </div>
 
@@ -496,7 +496,12 @@ body {
   position: sticky; top: 0; z-index: 50;
   box-shadow: var(--shadow-md);
 }
-.topbar-brand { display: flex; align-items: center; gap: 10px; }
+.topbar-brand {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
 .topbar-brand .logo-mark {
   width: 36px; height: 36px;
   border-radius: 50%;
