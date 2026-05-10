@@ -23,6 +23,7 @@ const { normalizeCode } = require('../utils/slugs');
 
 const LEX_PHONE = '(972) 466-1917';
 const LEX_PHONE_TEL = '9724661917';
+const LEX_MASCOT_URL = 'https://www.lexairconditioning.com/wp-content/uploads/2026/05/lex_gabe-2.png';
 
 const SCHEDULER_CSS = 'https://scheduler-mu-three.vercel.app/lex-scheduler.css';
 const SCHEDULER_JS  = 'https://scheduler-mu-three.vercel.app/lex-scheduler.iife.js';
@@ -142,7 +143,7 @@ function renderLandingPage({ customer, settings }) {
 
 <div class="topbar">
   <div class="topbar-brand">
-    <div class="logo-mark">L</div>
+    <img class="logo-mark" src="${LEX_MASCOT_URL}" alt="LEX" />
     <div class="wordmark">LEX <span>AIR</span></div>
   </div>
   <a href="tel:${LEX_PHONE_TEL}" class="call-link">📞 ${LEX_PHONE}</a>
@@ -497,13 +498,12 @@ body {
 }
 .topbar-brand { display: flex; align-items: center; gap: 10px; }
 .topbar-brand .logo-mark {
-  width: 32px; height: 32px;
-  background: var(--gold);
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--navy-deep);
-  font-family: 'Montserrat', sans-serif;
-  font-weight: 900; font-size: 16px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
 }
 .topbar-brand .wordmark {
   color: #fff;

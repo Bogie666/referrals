@@ -2,6 +2,16 @@ const axios = require('axios');
 const supabase = require('../db');
 
 const CHIIRP_WEBHOOK_URL = process.env.CHIIRP_WEBHOOK_URL;
+const REFERRAL_BASE_URL  = process.env.REFERRAL_BASE_URL || 'https://lexperks.com/referral';
+
+function buildShareLink(code) {
+  if (!code) return '';
+  try {
+    return new URL(REFERRAL_BASE_URL).origin + '/share/' + code;
+  } catch (e) {
+    return 'https://lexperks.com/share/' + code;
+  }
+}
 
 /**
  * Triggers a Chiirp webhook with customer data.
@@ -59,6 +69,7 @@ async function sendReferralInvite(customer) {
       email:         email || '',
       referral_code: referral_code || '',
       referral_link: referral_link || '',
+      share_link:    buildShareLink(referral_code),
     },
   });
 }
@@ -86,6 +97,7 @@ async function sendRewardNotification(customer, referredName, amount, paymentMet
       referred_name:  referredFirst,
       reward_amount:  String(amount),
       payment_method: paymentMethod,
+      share_link:     buildShareLink(customer.referral_code),
     },
   });
 }

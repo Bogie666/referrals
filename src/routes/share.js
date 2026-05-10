@@ -26,6 +26,7 @@ const { normalizeCode } = require('../utils/slugs');
 const REFERRAL_BASE_URL = process.env.REFERRAL_BASE_URL || 'https://lexperks.com/referral';
 const SHARE_BASE_URL    = (process.env.REFERRAL_BASE_URL ? new URL(process.env.REFERRAL_BASE_URL).origin : 'https://lexperks.com');
 const LEX_PHONE         = '(972) 466-1917';
+const LEX_MASCOT_URL    = 'https://www.lexairconditioning.com/wp-content/uploads/2026/05/lex_gabe-2.png';
 
 // Hardcoded ticker. Replace with live data once we have enough referrals
 // to make a rolling feed meaningful.
@@ -242,7 +243,7 @@ ${mode === 'auth' ? '<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@
 
 <div class="topbar">
   <div class="topbar-brand">
-    <div class="logo-mark">L</div>
+    <img class="logo-mark" src="${LEX_MASCOT_URL}" alt="LEX" />
     <div class="wordmark">LEX<span>PERKS</span></div>
   </div>
   <a href="tel:9724661917" class="call-link">📞 ${LEX_PHONE}</a>
@@ -452,7 +453,7 @@ function renderLookupBody({ settings }) {
   return `
 <div class="wrap">
   <div class="card lookup-card">
-    <div class="lookup-icon">L</div>
+    <img class="lookup-icon" src="${LEX_MASCOT_URL}" alt="LEX" />
     <div class="lookup-h">Welcome back</div>
     <div class="lookup-sub">Enter the phone number on your LEX account to view your referral code, link, and rewards.</div>
 
@@ -750,15 +751,12 @@ body {
 }
 .topbar-brand { display: flex; align-items: center; gap: 10px; }
 .topbar-brand .logo-mark {
-  width: 32px; height: 32px;
-  background: var(--gold);
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--navy-deep);
-  font-family: 'Montserrat', sans-serif;
-  font-weight: 900;
-  font-size: 16px;
-  letter-spacing: -0.02em;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
 }
 .topbar-brand .wordmark {
   color: #fff;
@@ -1151,14 +1149,12 @@ body {
 }
 .lookup-card { text-align: center; padding: 36px 24px 30px; }
 .lookup-icon {
-  width: 64px; height: 64px;
+  width: 96px; height: 96px;
   margin: 0 auto 16px;
+  border-radius: 50%;
   background: linear-gradient(135deg, var(--navy), var(--navy-dark));
-  border-radius: 16px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--gold);
-  font-family: 'Montserrat', sans-serif;
-  font-weight: 900; font-size: 28px;
+  object-fit: cover;
+  display: block;
   box-shadow: var(--shadow-lg);
 }
 .lookup-h {

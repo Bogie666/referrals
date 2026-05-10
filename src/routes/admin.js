@@ -182,7 +182,7 @@ router.post('/api/referral/:id/payout', requireAdmin, async (req, res) => {
   try {
     const { data: referral, error: fetchErr } = await supabase
       .from('referrals')
-      .select('*, referrer:referrer_id(id, name, phone, email, total_referrals, total_rewards)')
+      .select('*, referrer:referrer_id(id, name, phone, email, referral_code, total_referrals, total_rewards)')
       .eq('id', id)
       .single();
 
@@ -281,6 +281,8 @@ const ALLOWED_SETTINGS = new Set([
   'payout_percentage',
   'payout_cap',
   'max_lookback_hours',
+  'reengage_days',
+  'reengage_max_age_days',
 ]);
 
 const NUMERIC_SETTINGS = {
@@ -289,7 +291,22 @@ const NUMERIC_SETTINGS = {
   payout_percentage:     { min: 0, max: 100 },
   payout_cap:            { min: 0 },
   max_lookback_hours:    { min: 1, max: 168 },
+  reengage_max_age_days: { min: 1, max: 365 },
 };
+
+// Special validation for reengage_days (comma-separated list of positive integers)
+function validateReengageDays(raw) {
+  if (raw == null || String(raw).trim() === '') return ''; // empty disables
+  const parts = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+  for (const p of parts) {
+    const n = parseInt(p, 10);
+    if (!Number.isFinite(n) || n <= 0 || String(n) !== p) {
+      return { error: `reengage_days entry "${p}" must be a positive integer` };
+    }
+  }
+  // Re-stringify cleanly: "7, 14, 30"
+  return parts.join(', ');
+}
 
 router.post('/api/settings', requireSuperAdmin, async (req, res) => {
   const { settings } = req.body;
@@ -316,6 +333,12 @@ router.post('/api/settings', requireSuperAdmin, async (req, res) => {
         return res.status(400).json({ error: `${key} must be ≤ ${bounds.max}` });
       }
       value = String(n);
+    } else if (key === 'reengage_days') {
+      const result = validateReengageDays(rawValue);
+      if (result && typeof result === 'object' && result.error) {
+        return res.status(400).json({ error: result.error });
+      }
+      value = result;
     } else {
       value = String(rawValue ?? '');
     }
