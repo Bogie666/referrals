@@ -121,6 +121,32 @@ async function getCompletedJobs(token, completedOnOrAfter) {
   }
 }
 
+// ── Get custom fields for a single job ────────────────────────
+/**
+ * The JPM v2 jobs list endpoint does not reliably return
+ * customFields inline. To read the "Referred by Code" value
+ * (typeId 406119323) that lives on the JOB record, fetch the job
+ * detail explicitly. Called per-qualified-job in the poller.
+ *
+ * @param {string} token
+ * @param {number|string} jobId
+ * @returns {Array} customFields array, or [] on miss
+ */
+async function getJobCustomFields(token, jobId) {
+  if (process.env.DEMO_MODE === 'true') return [];
+
+  try {
+    const res = await axios.get(
+      `${ST_API_BASE}/jpm/v2/tenant/${TENANT_ID}/jobs/${jobId}`,
+      { headers: stHeaders(token) }
+    );
+    return res.data?.customFields || [];
+  } catch (err) {
+    console.error(`[ST API] getJobCustomFields ${jobId} failed:`, err.response?.data || err.message);
+    return [];
+  }
+}
+
 // ── Get a single customer ─────────────────────────────────────
 /**
  * @param {string} token
@@ -339,6 +365,7 @@ function simulateDemoContacts(customerId) {
 module.exports = {
   getAccessToken,
   getCompletedJobs,
+  getJobCustomFields,
   getCustomer,
   getCustomerContacts,
   writeReferralCodeToCustomer,

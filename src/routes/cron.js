@@ -21,6 +21,7 @@ const supabase = require('../db');
 const {
   getAccessToken,
   getCompletedJobs,
+  getJobCustomFields,
   getCustomer,
   getCustomerContacts,
   writeReferralCodeToCustomer,
@@ -179,10 +180,16 @@ async function processJob(job, token, payoutSettings, results) {
   const REFERRAL_CODE_TYPE_ID      = parseInt(process.env.ST_REFERRAL_CODE_TYPE_ID || '406119043');
   const REFERRED_BY_CODE_TYPE_ID   = parseInt(process.env.ST_REFERRED_BY_CODE_TYPE_ID || '406119323');
 
-  // ── Step 6: Check if this job has a "Referred by Code" ─────
-  // If a CSR entered a referral code when this customer booked,
-  // it will be in custom field 406119323. Match it back to the referrer.
-  const referredByField = (customer.customFields || []).find(
+  // ── Step 6: Check if this JOB has a "Referred by Code" ─────
+  // Field 406119323 lives on the JOB record (set by CSR at booking
+  // or by the online scheduler via PATCH on the job), NOT on the
+  // customer. The JPM v2 jobs list endpoint does not reliably
+  // return customFields inline, so fetch them explicitly per job.
+  const jobCustomFields = job.customFields && job.customFields.length
+    ? job.customFields
+    : await getJobCustomFields(token, jobId);
+
+  const referredByField = (jobCustomFields || []).find(
     f => f.typeId === REFERRED_BY_CODE_TYPE_ID && f.value
   );
 
