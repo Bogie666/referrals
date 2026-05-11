@@ -3,7 +3,9 @@ const router = express.Router();
 const { requireAdmin, requireSuperAdmin, requireWriteAccess, createSession, destroySession, authenticateUser, hashPassword } = require('../middleware/adminAuth');
 const { getStats, getReferrals, getTopReferrers, getAllCustomers, getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers } = require('../services/adminData');
 const { renderLogin, renderDashboard } = require('../views/dashboard');
-const { sendRewardNotification } = require('../services/chiirp');
+const { sendRewardNotification, sendReferralInvite } = require('../services/chiirp');
+const { getAccessToken, writeReferralCodeToCustomer } = require('../services/servicetitan');
+const { generateSlug, buildReferralLink, generateUniqueReferralCode } = require('../utils/slugs');
 const supabase = require('../db');
 
 // ──────────────────────────────────────────────────────────────
@@ -255,6 +257,143 @@ router.post('/api/referral/:id/mark-rejected', requireWriteAccess, async (req, r
 
   } catch (err) {
     console.error('[Admin] mark-rejected error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────
+// POST /admin/api/customers
+// Manually enroll a customer. Used for VIPs, manual data entry,
+// or backfilling a customer the poller missed. Generates a fresh
+// unique code, inserts in Supabase, and (when given a real ST
+// customer ID) writes the code back to ST. Optionally fires the
+// Chiirp invite immediately.
+//
+// Body: { name, phone, email?, st_customer_id?, send_invite? }
+// Returns: { success, customer, stWriteResult, chiirpResult }
+// ──────────────────────────────────────────────────────────────
+router.post('/api/customers', requireWriteAccess, async (req, res) => {
+  const { name, phone, email, st_customer_id, send_invite } = req.body || {};
+
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+  const phoneDigits = String(phone || '').replace(/\D/g, '').replace(/^1/, '');
+  if (phoneDigits.length !== 10) {
+    return res.status(400).json({ error: 'Phone must be a 10-digit number' });
+  }
+  const emailClean = email ? String(email).toLowerCase().trim() : '';
+
+  // Resolve ST customer ID. If admin provides one, we'll try to
+  // write the code back to that ST record. If they don't, we
+  // generate a MANUAL- placeholder so the unique constraint is
+  // happy but the ST write-back is skipped.
+  const stIdInput = st_customer_id ? String(st_customer_id).trim() : '';
+  const stId = stIdInput || `MANUAL-${Date.now()}`;
+  const isRealStId = stIdInput && !stIdInput.startsWith('MANUAL-');
+
+  let code, slug, link;
+  try {
+    code = await generateUniqueReferralCode(supabase);
+    slug = generateSlug(name);
+    link = buildReferralLink(code);
+  } catch (err) {
+    console.error('[Admin] code generation failed:', err.message);
+    return res.status(500).json({ error: 'Failed to generate referral code' });
+  }
+
+  const { data: customer, error } = await supabase
+    .from('customers')
+    .insert({
+      st_customer_id: stId,
+      name:           String(name).trim(),
+      phone:          phoneDigits,
+      email:          emailClean,
+      referral_slug:  slug,
+      referral_link:  link,
+      referral_code:  code,
+      invite_sent_at: send_invite ? new Date().toISOString() : null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'A customer with that ST customer ID or phone already exists' });
+    }
+    console.error('[Admin] manual enroll insert failed:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+
+  console.log(`[Admin] Manual enroll: ${customer.name} (${customer.phone}) → ${code}`);
+
+  // Best-effort: write the code back to ST so CSRs see it on the
+  // real customer record. Only fires when a real ST ID was given.
+  let stWriteResult = null;
+  if (isRealStId) {
+    try {
+      const token = await getAccessToken();
+      const typeId = parseInt(process.env.ST_REFERRAL_CODE_TYPE_ID || '406119043');
+      stWriteResult = await writeReferralCodeToCustomer(token, stId, code, typeId);
+    } catch (err) {
+      console.error(`[Admin] ST write-back failed for ${stId}:`, err.message);
+      stWriteResult = false;
+    }
+  }
+
+  // Best-effort: fire the Chiirp invite immediately if requested.
+  let chiirpResult = null;
+  if (send_invite) {
+    try {
+      const result = await sendReferralInvite(customer);
+      chiirpResult = result?.success !== false;
+    } catch (err) {
+      console.error(`[Admin] Chiirp invite failed for ${customer.id}:`, err.message);
+      chiirpResult = false;
+    }
+  }
+
+  res.json({ success: true, customer, stWriteResult, chiirpResult });
+});
+
+// ──────────────────────────────────────────────────────────────
+// POST /admin/api/customers/:id/send-invite
+// Re-fires the Chiirp invite webhook for an existing customer.
+// Useful when the original SMS/email got lost, or to manually
+// onboard someone who was enrolled while DEMO_MODE was on.
+// ──────────────────────────────────────────────────────────────
+router.post('/api/customers/:id/send-invite', requireWriteAccess, async (req, res) => {
+  const { id } = req.params;
+
+  const { data: customer, error } = await supabase
+    .from('customers')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error || !customer) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+
+  if (!customer.phone) {
+    return res.status(400).json({ error: 'Customer has no phone on file — nothing to send to' });
+  }
+
+  try {
+    const result = await sendReferralInvite(customer);
+    if (result?.success === false) {
+      return res.status(502).json({ error: result.error || 'Chiirp webhook failed' });
+    }
+
+    await supabase
+      .from('customers')
+      .update({ invite_sent_at: new Date().toISOString() })
+      .eq('id', id);
+
+    console.log(`[Admin] Re-sent invite for ${customer.name} (${customer.phone})`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Admin] send-invite error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
