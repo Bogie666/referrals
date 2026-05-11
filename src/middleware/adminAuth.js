@@ -73,44 +73,76 @@ async function hashPassword(password) {
 }
 
 /**
- * Middleware: protect admin routes.
- * Reads session token from cookie, attaches req.adminUser.
+ * Loads the full admin_users row for the current session and attaches
+ * it to req.adminUser (+ req.adminUserId for back-compat). Returns the
+ * user on success, null if no/invalid/inactive session.
+ *
+ * Cached on the request so repeat lookups within a single request
+ * (e.g. requireAdmin → requireWriteAccess chained) don't double-query.
  */
-function requireAdmin(req, res, next) {
+async function loadAdminUser(req) {
+  if (req.adminUser) return req.adminUser;
+
   const token = req.cookies?.lex_admin_session;
   const session = parseSession(token);
+  if (!session) return null;
 
-  if (session) {
-    req.adminUserId = session.userId;
-    return next();
+  try {
+    const { data: user } = await supabase
+      .from('admin_users')
+      .select('id, name, email, role, active')
+      .eq('id', session.userId)
+      .single();
+    if (!user || !user.active) return null;
+    req.adminUser   = user;
+    req.adminUserId = user.id;
+    return user;
+  } catch (e) {
+    return null;
   }
-
-  res.redirect('/admin/login');
 }
 
 /**
- * Middleware: require super_admin role.
+ * Middleware: any authenticated admin (super_admin, admin, viewer).
  */
-async function requireSuperAdmin(req, res, next) {
-  const token = req.cookies?.lex_admin_session;
-  const session = parseSession(token);
-
-  if (!session) return res.redirect('/admin/login');
-
-  req.adminUserId = session.userId;
-
-  try {
-    const { data } = await supabase
-      .from('admin_users')
-      .select('role')
-      .eq('id', session.userId)
-      .single();
-
-    if (data?.role === 'super_admin') return next();
-    return res.status(403).json({ error: 'Requires super_admin role' });
-  } catch {
-    return res.status(403).json({ error: 'Unauthorized' });
-  }
+async function requireAdmin(req, res, next) {
+  const user = await loadAdminUser(req);
+  if (!user) return res.redirect('/admin/login');
+  next();
 }
 
-module.exports = { requireAdmin, requireSuperAdmin, createSession, parseSession, destroySession, authenticateUser, hashPassword };
+/**
+ * Middleware: super_admin only.
+ */
+async function requireSuperAdmin(req, res, next) {
+  const user = await loadAdminUser(req);
+  if (!user) return res.redirect('/admin/login');
+  if (user.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Requires super_admin role' });
+  }
+  next();
+}
+
+/**
+ * Middleware: any role that can modify data (super_admin or admin).
+ * Viewers are blocked.
+ */
+async function requireWriteAccess(req, res, next) {
+  const user = await loadAdminUser(req);
+  if (!user) return res.redirect('/admin/login');
+  if (user.role === 'viewer') {
+    return res.status(403).json({ error: 'This account is read-only' });
+  }
+  next();
+}
+
+module.exports = {
+  requireAdmin,
+  requireSuperAdmin,
+  requireWriteAccess,
+  createSession,
+  parseSession,
+  destroySession,
+  authenticateUser,
+  hashPassword,
+};

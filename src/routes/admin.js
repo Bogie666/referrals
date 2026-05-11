@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { requireAdmin, requireSuperAdmin, createSession, destroySession, authenticateUser, hashPassword } = require('../middleware/adminAuth');
+const { requireAdmin, requireSuperAdmin, requireWriteAccess, createSession, destroySession, authenticateUser, hashPassword } = require('../middleware/adminAuth');
 const { getStats, getReferrals, getTopReferrers, getAllCustomers, getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers } = require('../services/adminData');
 const { renderLogin, renderDashboard } = require('../views/dashboard');
 const { sendRewardNotification } = require('../services/chiirp');
@@ -71,7 +71,7 @@ async function loadDashboardData() {
 router.get('/', requireAdmin, async (req, res) => {
   try {
     const data = await loadDashboardData();
-    res.send(renderDashboard({ ...data, activeTab: 'overview' }));
+    res.send(renderDashboard({ ...data, currentUser: req.adminUser, activeTab: 'overview' }));
   } catch (err) {
     console.error('[Admin] Overview error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
@@ -88,7 +88,7 @@ router.get('/referrals', requireAdmin, async (req, res) => {
       loadDashboardData(),
       getReferrals({ status, limit: 200 }),
     ]);
-    res.send(renderDashboard({ ...data, referrals: filtered, activeTab: 'referrals' }));
+    res.send(renderDashboard({ ...data, referrals: filtered, currentUser: req.adminUser, activeTab: 'referrals' }));
   } catch (err) {
     console.error('[Admin] Referrals error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
@@ -104,7 +104,7 @@ router.get('/referrers', requireAdmin, async (req, res) => {
       loadDashboardData(),
       getAllCustomers(500),
     ]);
-    res.send(renderDashboard({ ...data, allCustomers, activeTab: 'customers' }));
+    res.send(renderDashboard({ ...data, allCustomers, currentUser: req.adminUser, activeTab: 'customers' }));
   } catch (err) {
     console.error('[Admin] Referrers error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
@@ -117,7 +117,7 @@ router.get('/referrers', requireAdmin, async (req, res) => {
 router.get('/activity', requireAdmin, async (req, res) => {
   try {
     const data = await loadDashboardData();
-    res.send(renderDashboard({ ...data, activeTab: 'activity' }));
+    res.send(renderDashboard({ ...data, currentUser: req.adminUser, activeTab: 'activity' }));
   } catch (err) {
     console.error('[Admin] Activity error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
@@ -130,7 +130,7 @@ router.get('/activity', requireAdmin, async (req, res) => {
 router.get('/portal', requireAdmin, async (req, res) => {
   try {
     const data = await loadDashboardData();
-    res.send(renderDashboard({ ...data, activeTab: 'portal' }));
+    res.send(renderDashboard({ ...data, currentUser: req.adminUser, activeTab: 'portal' }));
   } catch (err) {
     console.error('[Admin] Portal preview error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
@@ -147,7 +147,7 @@ router.get('/settings', requireAdmin, async (req, res) => {
       getSettings(),
       getAdminUsers(),
     ]);
-    res.send(renderDashboard({ ...data, settings, adminUsers, activeTab: 'settings' }));
+    res.send(renderDashboard({ ...data, settings, adminUsers, currentUser: req.adminUser, activeTab: 'settings' }));
   } catch (err) {
     console.error('[Admin] Settings error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
@@ -171,7 +171,7 @@ router.get('/api/stats', requireAdmin, async (req, res) => {
 // Records a payout for a completed referral.
 // Creates payout record, updates referral status, sends notification.
 // ──────────────────────────────────────────────────────────────
-router.post('/api/referral/:id/payout', requireAdmin, async (req, res) => {
+router.post('/api/referral/:id/payout', requireWriteAccess, async (req, res) => {
   const { id } = req.params;
   const { payment_method, amount, reference_note } = req.body;
 
@@ -248,7 +248,7 @@ router.post('/api/referral/:id/payout', requireAdmin, async (req, res) => {
 // ──────────────────────────────────────────────────────────────
 // POST /admin/api/referral/:id/mark-rejected
 // ──────────────────────────────────────────────────────────────
-router.post('/api/referral/:id/mark-rejected', requireAdmin, async (req, res) => {
+router.post('/api/referral/:id/mark-rejected', requireWriteAccess, async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
 
