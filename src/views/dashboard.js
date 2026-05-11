@@ -726,7 +726,7 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
 
   ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) : ''}
   ${activeTab === 'referrals' ? renderReferralsTab(referrals, canWrite) : ''}
-  ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || []) : ''}
+  ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || [], canWrite) : ''}
   ${activeTab === 'activity'  ? renderActivityTab(recentActivity) : ''}
   ${activeTab === 'settings'  ? renderSettingsTab(settings || {}, adminUsers || []) : ''}
 
@@ -1282,12 +1282,21 @@ function renderReferralsTab(referrals, canWrite = true) {
   `;
 }
 
-function renderReferrersTab(topReferrers, allCustomers) {
+function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
   const customers = allCustomers || [];
   return `
-    <div class="page-header">
-      <h2>Customers</h2>
-      <p>All enrolled customers — search by name, phone, email, or referral code</p>
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;">
+      <div>
+        <h2>Customers</h2>
+        <p>All enrolled customers — search by name, phone, email, or referral code</p>
+      </div>
+      ${canWrite ? `
+        <button type="button" onclick="openEnrollModal()" style="
+          padding:10px 18px; background:var(--navy); color:#fff;
+          border:none; border-radius:8px; font-size:13px; font-weight:600;
+          cursor:pointer; white-space:nowrap; font-family:inherit;
+        ">+ Enroll customer</button>
+      ` : ''}
     </div>
 
     ${topReferrers.length > 0 ? `
@@ -1371,9 +1380,14 @@ function renderReferrersTab(topReferrers, allCustomers) {
                 </td>
                 <td>
                   ${c.referral_link ? `
-                    <button type="button" onclick="copyToClipboard('${c.referral_link.replace(/'/g, "\\'")}', this)"
-                            style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px;color:var(--text);"
-                            title="Copy link">Copy link</button>` : '—'}
+                    <div style="display:flex;gap:4px;flex-wrap:nowrap;">
+                      <button type="button" onclick="copyToClipboard('${c.referral_link.replace(/'/g, "\\'")}', this)"
+                              style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px;color:var(--text);"
+                              title="Copy link">Copy link</button>
+                      ${canWrite ? `<button type="button" onclick="resendInvite('${c.id}', this)"
+                              style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text);"
+                              title="Resend Chiirp invite text + email">📨</button>` : ''}
+                    </div>` : '—'}
                 </td>
                 <td style="text-align:center;">${c.total_referrals || 0}</td>
                 <td style="font-weight:600;color:${c.total_rewards > 0 ? 'var(--green)' : 'var(--muted)'};">${formatCurrency(c.total_rewards || 0)}</td>
@@ -1424,7 +1438,122 @@ function renderReferrersTab(topReferrers, allCustomers) {
           });
         }
       }
+
+      function resendInvite(customerId, btn) {
+        if (!confirm('Re-send the Chiirp invite text + email for this customer?')) return;
+        var original = btn.textContent;
+        btn.disabled = true; btn.textContent = '…';
+        fetch('/admin/api/customers/' + customerId + '/send-invite', { method: 'POST' })
+          .then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+          .then(function(res) {
+            if (res.ok && res.body.success) {
+              btn.textContent = '✓';
+              setTimeout(function() { btn.textContent = original; btn.disabled = false; }, 1500);
+            } else {
+              alert('Failed: ' + (res.body.error || 'Unknown error'));
+              btn.textContent = original; btn.disabled = false;
+            }
+          })
+          .catch(function(err) {
+            alert('Network error: ' + err.message);
+            btn.textContent = original; btn.disabled = false;
+          });
+      }
+
+      function openEnrollModal() {
+        document.getElementById('enroll-error').style.display = 'none';
+        document.getElementById('enroll-name').value = '';
+        document.getElementById('enroll-phone').value = '';
+        document.getElementById('enroll-email').value = '';
+        document.getElementById('enroll-st-id').value = '';
+        document.getElementById('enroll-send-invite').checked = true;
+        document.getElementById('enroll-modal').classList.add('active');
+        setTimeout(function() { document.getElementById('enroll-name').focus(); }, 50);
+      }
+      function closeEnrollModal() {
+        document.getElementById('enroll-modal').classList.remove('active');
+      }
+      function submitEnroll() {
+        var name = document.getElementById('enroll-name').value.trim();
+        var phone = document.getElementById('enroll-phone').value.trim();
+        var email = document.getElementById('enroll-email').value.trim();
+        var stId = document.getElementById('enroll-st-id').value.trim();
+        var sendInvite = document.getElementById('enroll-send-invite').checked;
+        var errEl = document.getElementById('enroll-error');
+        errEl.style.display = 'none';
+
+        if (!name) { errEl.textContent = 'Name is required.'; errEl.style.display = 'block'; return; }
+        if (phone.replace(/\\D/g, '').length !== 10) { errEl.textContent = 'Phone must be 10 digits.'; errEl.style.display = 'block'; return; }
+
+        var btn = document.getElementById('enroll-submit-btn');
+        btn.disabled = true; btn.textContent = 'Enrolling…';
+
+        fetch('/admin/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: name, phone: phone, email: email || null,
+            st_customer_id: stId || null,
+            send_invite: sendInvite,
+          }),
+        })
+          .then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+          .then(function(res) {
+            if (res.ok && res.body.success) {
+              var c = res.body.customer;
+              var notes = [];
+              notes.push('Code: ' + c.referral_code);
+              if (sendInvite) notes.push(res.body.chiirpResult ? 'Chiirp invite fired ✓' : 'Chiirp invite failed — check logs');
+              if (res.body.stWriteResult === true)  notes.push('ST custom field updated ✓');
+              if (res.body.stWriteResult === false) notes.push('ST write-back failed — check logs');
+              alert(c.name + ' enrolled.\\n\\n' + notes.join('\\n'));
+              location.reload();
+            } else {
+              errEl.textContent = res.body.error || 'Unknown error';
+              errEl.style.display = 'block';
+              btn.disabled = false; btn.textContent = 'Enroll customer';
+            }
+          })
+          .catch(function(err) {
+            errEl.textContent = 'Network error: ' + err.message;
+            errEl.style.display = 'block';
+            btn.disabled = false; btn.textContent = 'Enroll customer';
+          });
+      }
     </script>
+
+    <!-- Enroll customer modal -->
+    <div class="modal-overlay" id="enroll-modal">
+      <div class="modal-box">
+        <h3>Manually enroll a customer</h3>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+          Generates a referral code and inserts the customer. If you provide a real ServiceTitan customer ID, we'll write the code back to the ST record.
+        </p>
+        <div id="enroll-error" style="background:#fee2e2; color:#dc2626; padding:10px 12px; border-radius:8px; font-size:13px; margin-bottom:14px; display:none;"></div>
+
+        <label>Name <span style="color:#dc2626;">*</span></label>
+        <input id="enroll-name" type="text" placeholder="Sarah Mitchell" autocomplete="off" />
+
+        <label>Phone <span style="color:#dc2626;">*</span></label>
+        <input id="enroll-phone" type="tel" placeholder="(972) 555-0100" autocomplete="off" />
+
+        <label>Email</label>
+        <input id="enroll-email" type="email" placeholder="sarah@example.com" autocomplete="off" />
+
+        <label>ServiceTitan Customer ID <span style="color:var(--muted); font-weight:400;">(optional)</span></label>
+        <input id="enroll-st-id" type="text" placeholder="123456789 — leave blank for manual-only" autocomplete="off" />
+
+        <label style="display:flex; align-items:center; gap:8px; margin-top:14px; cursor:pointer;">
+          <input id="enroll-send-invite" type="checkbox" checked style="width:auto; margin:0;" />
+          <span style="font-weight:400; color:var(--text); font-size:13px; text-transform:none; letter-spacing:0;">Send Chiirp invite text + email now</span>
+        </label>
+
+        <div class="modal-actions" style="margin-top:18px;">
+          <button class="btn-secondary" onclick="closeEnrollModal()">Cancel</button>
+          <button class="btn-primary" id="enroll-submit-btn" onclick="submitEnroll()">Enroll customer</button>
+        </div>
+      </div>
+    </div>
   `;
 }
 
