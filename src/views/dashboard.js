@@ -97,7 +97,8 @@ function renderLogin(error = '') {
 </html>`;
 }
 
-function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentActivity, monthlyTrend, settings, adminUsers, activeTab = 'overview' }) {
+function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentActivity, monthlyTrend, settings, adminUsers, currentUser, activeTab = 'overview' }) {
+  const canWrite = currentUser?.role !== 'viewer';
   const navItems = [
     { id: 'overview',   label: 'Overview',       href: '/admin' },
     { id: 'referrals',  label: 'Referrals',      href: '/admin/referrals' },
@@ -186,6 +187,32 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
       color: rgba(255,255,255,0.5);
       margin-top: 3px;
     }
+    .sidebar-user {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .sidebar-user__name {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.85);
+      line-height: 1.2;
+    }
+    .sidebar-user__role {
+      align-self: flex-start;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.75);
+    }
+    .sidebar-user__role--super_admin { background: rgba(139,92,246,0.25); color: #c4b5fd; }
+    .sidebar-user__role--admin       { background: rgba(59,130,246,0.25); color: #93c5fd; }
+    .sidebar-user__role--viewer      { background: rgba(148,163,184,0.20); color: #cbd5e1; }
     .sidebar-nav {
       padding: 16px 12px;
       flex: 1;
@@ -674,6 +701,12 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
   <div class="sidebar-brand">
     <h1>LEX Referral</h1>
     <p>Admin Dashboard</p>
+    ${currentUser ? `
+      <div class="sidebar-user">
+        <span class="sidebar-user__name">${currentUser.name}</span>
+        <span class="sidebar-user__role sidebar-user__role--${currentUser.role}">${currentUser.role === 'super_admin' ? 'Super Admin' : currentUser.role === 'admin' ? 'Admin' : 'Viewer'}</span>
+      </div>
+    ` : ''}
   </div>
   <nav class="sidebar-nav">
     ${navItems.map(n => `
@@ -693,7 +726,7 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
 <main class="main">
 
   ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) : ''}
-  ${activeTab === 'referrals' ? renderReferralsTab(referrals) : ''}
+  ${activeTab === 'referrals' ? renderReferralsTab(referrals, canWrite) : ''}
   ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || []) : ''}
   ${activeTab === 'activity'  ? renderActivityTab(recentActivity) : ''}
   ${activeTab === 'portal'    ? renderPortalTab() : ''}
@@ -1053,7 +1086,7 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
   `;
 }
 
-function renderReferralsTab(referrals) {
+function renderReferralsTab(referrals, canWrite = true) {
   const statuses = ['all', 'pending', 'booked', 'completed', 'rewarded', 'rejected'];
   const needsReward = referrals.filter(r => r.status === 'completed');
 
@@ -1172,7 +1205,7 @@ function renderReferralsTab(referrals) {
                 </td>
                 <td style="color:var(--muted);white-space:nowrap;">${formatDate(r.created_at)}</td>
                 <td style="white-space:nowrap;">
-                  ${r.status === 'completed' ? `
+                  ${r.status === 'completed' && canWrite ? `
                     <button
                       onclick="openPayoutModal('${r.id}', '${(r.referrer?.name || '').replace(/'/g, "\\'")}', ${r.reward_amount || 0})"
                       style="
@@ -1199,7 +1232,7 @@ function renderReferralsTab(referrals) {
                         cursor: pointer;
                       "
                     >Reject</button>
-                  ` : ''}
+                  ` : (r.status === 'completed' ? '<span style="font-size:12px; color:var(--muted);">Awaiting payout</span>' : '')}
                 </td>
               </tr>
             `).join('') || `
@@ -1525,7 +1558,7 @@ function renderSettingsTab(settings, adminUsers) {
                     font-size:12px; font-weight:600;
                     color:${u.role === 'super_admin' ? '#8b5cf6' : u.role === 'admin' ? '#3b82f6' : '#6b7280'};
                     background:${u.role === 'super_admin' ? '#ede9fe' : u.role === 'admin' ? '#dbeafe' : '#f3f4f6'};
-                  ">${u.role === 'super_admin' ? 'Super Admin' : u.role === 'admin' ? 'Admin' : 'User'}</span>
+                  ">${u.role === 'super_admin' ? 'Super Admin' : u.role === 'admin' ? 'Admin' : 'Viewer'}</span>
                 </td>
                 <td>
                   <span style="color:${u.active ? 'var(--green)' : '#ef4444'};font-weight:600;">
@@ -1568,8 +1601,9 @@ function renderSettingsTab(settings, adminUsers) {
             <div class="form-group">
               <label>Role</label>
               <select id="new-user-role">
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
+                <option value="admin">Admin (record payouts, view all)</option>
+                <option value="viewer">Viewer (read-only)</option>
+                <option value="super_admin">Super Admin (full access)</option>
               </select>
             </div>
           </div>
@@ -1646,7 +1680,7 @@ function renderSettingsTab(settings, adminUsers) {
       if (newName === null) return;
       var newEmail = prompt('Email:', email);
       if (newEmail === null) return;
-      var newRole = prompt('Role (admin or user):', role);
+      var newRole = prompt('Role (super_admin, admin, or viewer):', role);
       if (newRole === null) return;
       if (newRole !== 'admin' && newRole !== 'user') {
         alert('Role must be "admin" or "user".');
