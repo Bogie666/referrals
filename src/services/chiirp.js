@@ -13,6 +13,18 @@ function buildShareLink(code) {
   }
 }
 
+// Normalize a phone to the format Chiirp expects across every code
+// path. Cron has historically sent "1XXXXXXXXXX" for US 10-digit
+// numbers; the manual-enroll + resend paths were sending raw 10
+// digits and missing matches against existing Chiirp contacts.
+// One helper, used everywhere.
+function formatPhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (digits.length === 10) return `1${digits}`;
+  if (digits.length === 11 && digits[0] === '1') return digits;
+  return digits;
+}
+
 /**
  * Triggers a Chiirp webhook with customer data.
  * Chiirp handles the messaging automation from there.
@@ -60,7 +72,7 @@ async function sendReferralInvite(customer) {
   const message = `Referral invite triggered for ${firstName}`;
 
   return wrappedSendText({
-    to: phone,
+    to: formatPhone(phone),
     message,
     customerId,
     webhookData: {
@@ -87,7 +99,7 @@ async function sendRewardNotification(customer, referredName, amount, paymentMet
   const message = `Reward notification triggered for ${firstName}`;
 
   return wrappedSendText({
-    to: customer.phone,
+    to: formatPhone(customer.phone),
     message,
     customerId: customer.id,
     webhookData: {
