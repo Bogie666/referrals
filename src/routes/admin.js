@@ -125,19 +125,6 @@ router.get('/activity', requireAdmin, async (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────────────
-// GET /admin/portal
-// ──────────────────────────────────────────────────────────────
-router.get('/portal', requireAdmin, async (req, res) => {
-  try {
-    const data = await loadDashboardData();
-    res.send(renderDashboard({ ...data, currentUser: req.adminUser, activeTab: 'portal' }));
-  } catch (err) {
-    console.error('[Admin] Portal preview error:', err.message);
-    res.status(500).send('Dashboard error: ' + err.message);
-  }
-});
-
-// ──────────────────────────────────────────────────────────────
 // GET /admin/settings
 // ──────────────────────────────────────────────────────────────
 router.get('/settings', requireAdmin, async (req, res) => {
