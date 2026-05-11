@@ -26,6 +26,15 @@ Until those three steps are done, the system is in demo mode and won't actually 
 
 6 chars from a 32-char unambiguous alphabet (no 0/1/I/O/L). Generated in `src/utils/slugs.js generateUniqueReferralCode`, written to ServiceTitan custom field 406119043 by the poller, used in URLs as `lexperks.com/referral?r=CODE`. Lookups normalize input via `normalizeCode()` so dashes/spaces/case don't matter.
 
+## Eligibility filters (enrollment only)
+
+These gate which customers get enrolled. They do NOT affect referral matching — a friend's job credits the referrer regardless.
+
+- `residential_only` (default `true`) — skip ST customers whose `type !== 'Residential'`.
+- `excluded_business_unit_ids` (default `6540, 7698, 7832, 7949, 8087`) — comma-separated ST business unit IDs. Jobs in these BUs don't trigger enrollment.
+
+Both editable in `/admin/settings → Eligibility Filters`.
+
 ## Safety rails
 
 - `max_lookback_hours` in `system_settings` (default 24) caps how far back the poller can reach regardless of `poll_state.last_polled_at`. Protects against another "process the entire backlog" surprise.

@@ -409,6 +409,8 @@ const ALLOWED_SETTINGS = new Set([
   'max_lookback_hours',
   'reengage_days',
   'reengage_max_age_days',
+  'residential_only',
+  'excluded_business_unit_ids',
 ]);
 
 const NUMERIC_SETTINGS = {
@@ -419,6 +421,21 @@ const NUMERIC_SETTINGS = {
   max_lookback_hours:    { min: 1, max: 168 },
   reengage_max_age_days: { min: 1, max: 365 },
 };
+
+// Validate comma-separated list of positive integers for the BU
+// exclusion setting. Returns a normalized string ("123, 456") or
+// an { error } object.
+function validateBusinessUnitIds(raw) {
+  if (raw == null || String(raw).trim() === '') return '';
+  const parts = String(raw).split(',').map(s => s.trim()).filter(Boolean);
+  for (const p of parts) {
+    const n = parseInt(p, 10);
+    if (!Number.isFinite(n) || n <= 0 || String(n) !== p) {
+      return { error: `excluded_business_unit_ids entry "${p}" must be a positive integer` };
+    }
+  }
+  return parts.join(', ');
+}
 
 // Special validation for reengage_days (comma-separated list of positive integers)
 function validateReengageDays(raw) {
@@ -465,6 +482,14 @@ router.post('/api/settings', requireSuperAdmin, async (req, res) => {
         return res.status(400).json({ error: result.error });
       }
       value = result;
+    } else if (key === 'excluded_business_unit_ids') {
+      const result = validateBusinessUnitIds(rawValue);
+      if (result && typeof result === 'object' && result.error) {
+        return res.status(400).json({ error: result.error });
+      }
+      value = result;
+    } else if (key === 'residential_only') {
+      value = (rawValue === true || rawValue === 'true') ? 'true' : 'false';
     } else {
       value = String(rawValue ?? '');
     }
