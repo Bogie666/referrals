@@ -1525,7 +1525,7 @@ function renderSettingsTab(settings, adminUsers) {
                     font-size:12px; font-weight:600;
                     color:${u.role === 'super_admin' ? '#8b5cf6' : u.role === 'admin' ? '#3b82f6' : '#6b7280'};
                     background:${u.role === 'super_admin' ? '#ede9fe' : u.role === 'admin' ? '#dbeafe' : '#f3f4f6'};
-                  ">${u.role === 'super_admin' ? 'Super Admin' : u.role === 'admin' ? 'Admin' : 'User'}</span>
+                  ">${u.role === 'super_admin' ? 'Super Admin' : u.role === 'admin' ? 'Admin' : 'Viewer'}</span>
                 </td>
                 <td>
                   <span style="color:${u.active ? 'var(--green)' : '#ef4444'};font-weight:600;">
@@ -1568,8 +1568,9 @@ function renderSettingsTab(settings, adminUsers) {
             <div class="form-group">
               <label>Role</label>
               <select id="new-user-role">
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
+                <option value="admin">Admin (record payouts, view all)</option>
+                <option value="viewer">Viewer (read-only)</option>
+                <option value="super_admin">Super Admin (full access)</option>
               </select>
             </div>
           </div>
@@ -1646,7 +1647,7 @@ function renderSettingsTab(settings, adminUsers) {
       if (newName === null) return;
       var newEmail = prompt('Email:', email);
       if (newEmail === null) return;
-      var newRole = prompt('Role (admin or user):', role);
+      var newRole = prompt('Role (super_admin, admin, or viewer):', role);
       if (newRole === null) return;
       if (newRole !== 'admin' && newRole !== 'user') {
         alert('Role must be "admin" or "user".');

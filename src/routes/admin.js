@@ -364,9 +364,9 @@ router.post('/api/users', requireSuperAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Name, email, and password are required' });
   }
 
-  const validRoles = ['admin', 'user'];
+  const validRoles = ['super_admin', 'admin', 'viewer'];
   if (role && !validRoles.includes(role)) {
-    return res.status(400).json({ error: 'Role must be admin or user' });
+    return res.status(400).json({ error: 'Role must be super_admin, admin, or viewer' });
   }
 
   const password_hash = await hashPassword(password);
@@ -375,7 +375,7 @@ router.post('/api/users', requireSuperAdmin, async (req, res) => {
     name,
     email: email.toLowerCase().trim(),
     password_hash,
-    role: role || 'user',
+    role: role || 'admin',
   }).select('id, name, email, role, active, created_at').single();
 
   if (error) {
