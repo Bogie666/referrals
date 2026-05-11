@@ -1631,6 +1631,28 @@ function renderSettingsTab(settings, adminUsers) {
           </div>
         </div>
 
+        <h4 style="font-family:'Montserrat',sans-serif; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin:18px 0 10px; padding-top:14px; border-top:1px solid var(--border);">Eligibility Filters</h4>
+        <div class="form-row">
+          <div class="form-group" style="flex:1 1 100%;">
+            <label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0;">
+              <input type="checkbox" id="setting-residential-only" ${(settings.residential_only ?? 'true') === 'true' ? 'checked' : ''} style="width:auto; margin:0;" />
+              <span style="font-weight:500; font-size:13px; color:var(--text);">Residential customers only</span>
+            </label>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px; padding-left:24px;">
+              When checked, only ServiceTitan customers with type = "Residential" are enrolled. Commercial accounts are skipped.
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1 1 100%;">
+            <label>Excluded Business Unit IDs</label>
+            <input type="text" id="setting-excluded-bu-ids" value="${(settings.excluded_business_unit_ids || '').replace(/"/g, '&quot;')}" placeholder="e.g. 6540, 7698 — leave empty to allow all" />
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">
+              Comma-separated ServiceTitan business unit IDs. Jobs whose business unit matches any of these are skipped for enrollment (referral matching still works regardless).
+            </div>
+          </div>
+        </div>
+
         <h4 style="font-family:'Montserrat',sans-serif; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin:18px 0 10px; padding-top:14px; border-top:1px solid var(--border);">Re-engagement Drip</h4>
         <div class="form-row">
           <div class="form-group" style="flex:1 1 100%;">
@@ -1752,6 +1774,8 @@ function renderSettingsTab(settings, adminUsers) {
         min_job_value:         document.getElementById('setting-min-job-value').value,
         new_customer_discount: document.getElementById('setting-new-customer-discount').value,
         max_lookback_hours:    document.getElementById('setting-max-lookback-hours').value,
+        residential_only:           document.getElementById('setting-residential-only').checked ? 'true' : 'false',
+        excluded_business_unit_ids: document.getElementById('setting-excluded-bu-ids').value,
         reengage_days:         document.getElementById('setting-reengage-days').value,
         reengage_max_age_days: document.getElementById('setting-reengage-max-age-days').value,
       };

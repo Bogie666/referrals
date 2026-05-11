@@ -38,6 +38,8 @@ const PAYOUT_SETTING_KEYS = [
   'payout_percentage',
   'payout_cap',
   'max_lookback_hours',
+  'excluded_business_unit_ids',
+  'residential_only',
 ];
 
 const DEFAULT_MAX_LOOKBACK_HOURS = 24;
@@ -78,13 +80,14 @@ function verifyCronAuth(req, res, next) {
 router.get('/poll-jobs', verifyCronAuth, async (req, res) => {
   const startTime = Date.now();
   const results = {
-    jobsFound:     0,
-    jobsQualified: 0,
-    codesGenerated: 0,
-    codesSkipped:  0,
-    referralsMatched: 0,
-    textsSent:     0,
-    errors:        [],
+    jobsFound:           0,
+    jobsQualified:       0,
+    codesGenerated:      0,
+    codesSkipped:        0,
+    enrollmentsFiltered: 0,
+    referralsMatched:    0,
+    textsSent:           0,
+    errors:              [],
   };
 
   try {
@@ -209,6 +212,24 @@ async function processJob(job, token, payoutSettings, results) {
 
     // Still make sure they exist in Supabase (in case they were missed before)
     await upsertCustomerInSupabase(customer, existingCode.value);
+    return;
+  }
+
+  // ── Eligibility filters ───────────────────────────────────
+  // Applied at the enrollment branch only — referral matching above
+  // is unaffected so a friend's job still credits the referrer even
+  // if the friend is commercial or in an excluded BU.
+  const excludedBuIds = parseExcludedBuIds(payoutSettings.excluded_business_unit_ids);
+  if (job.businessUnitId != null && excludedBuIds.includes(String(job.businessUnitId))) {
+    console.log(`[Poller] Skip enroll for customer ${customerId} — business unit ${job.businessUnitId} is excluded`);
+    results.enrollmentsFiltered++;
+    return;
+  }
+
+  const residentialOnly = String(payoutSettings.residential_only ?? 'true') === 'true';
+  if (residentialOnly && customer.type !== 'Residential') {
+    console.log(`[Poller] Skip enroll for customer ${customerId} — type "${customer.type || 'unknown'}" is not Residential`);
+    results.enrollmentsFiltered++;
     return;
   }
 
@@ -513,6 +534,13 @@ async function upsertCustomerInSupabase(stCustomer, referralCode, extras = {}) {
 }
 
 // ── Helper: convert ALL CAPS to Title Case ────────────────────
+function parseExcludedBuIds(raw) {
+  return String(raw || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 function toTitleCase(str) {
   return str
     .toLowerCase()
