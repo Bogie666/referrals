@@ -16,10 +16,6 @@
     {
       "path": "/api/cron/poll-jobs",
       "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/re-engage",
-      "schedule": "0 17 * * *"
     }
   ]
 }
