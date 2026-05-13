@@ -901,7 +901,7 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
 
   ${renderStatusStrip(systemStatus)}
 
-  ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) : ''}
+  ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, timeline, systemStatus, trendLabels, trendCreated, trendRewarded }) : ''}
   ${activeTab === 'referrals' ? renderReferralsTab(referrals, canWrite) : ''}
   ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || [], canWrite) : ''}
   ${activeTab === 'activity'  ? renderActivityTab(timeline || []) : ''}
@@ -1111,7 +1111,45 @@ applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
 </html>`;
 }
 
-function renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) {
+function renderFunnelSnapshot(systemStatus, stats) {
+  const c = systemStatus?.tracking?.counts || {};
+  const rows = [
+    { label: 'Portal views',         key: 'portal_view',              dot: 'portal' },
+    { label: 'Shares',               key: 'share',                    dot: 'share'  },
+    { label: 'Link clicks',          key: 'link_click',               dot: 'click'  },
+    { label: 'Scheduler opened',     key: 'scheduler_opened',         dot: 'funnel' },
+    { label: 'Slot selected',        key: 'slot_selected',            dot: 'funnel' },
+    { label: 'Info submitted',       key: 'customer_info_submitted',  dot: 'funnel' },
+    { label: 'Booking confirmed',    key: 'booking_confirmed',        dot: 'funnel' },
+  ];
+  const total = rows.reduce((sum, r) => sum + (c[r.key] || 0), 0);
+
+  return `
+    <div class="card">
+      <div class="card-header">
+        <h3>Funnel — last 24h</h3>
+        <span style="font-size:12px; color:var(--muted);">${total} event${total === 1 ? '' : 's'}</span>
+      </div>
+      <div style="padding: 6px 4px 14px;">
+        ${rows.map(r => {
+          const n = c[r.key] || 0;
+          return `
+            <div style="display:flex; align-items:center; justify-content:space-between;
+                        padding:10px 14px; border-bottom:1px solid var(--border);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="activity-dot ${r.dot}" style="width:10px; height:10px; padding:0; font-size:0;"></span>
+                <span style="font-size:13px;">${r.label}</span>
+              </div>
+              <span style="font-weight:700; font-size:15px; color:${n > 0 ? 'var(--text)' : 'var(--muted)'};">${n}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderOverview({ stats, referrals, topReferrers, recentActivity, timeline, systemStatus, trendLabels, trendCreated, trendRewarded }) {
   const total = stats.total || 1;
   const stages = [
     { key: 'pending',   count: stats.statusCounts.pending   },
@@ -1210,35 +1248,10 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
       </div>
     </div>
 
-    <!-- Bottom row: recent referrals + activity -->
+    <!-- Bottom row: funnel snapshot + live activity -->
     <div class="two-col">
 
-      <div class="card">
-        <div class="card-header">
-          <h3>Recent Referrals</h3>
-          <a href="/admin/referrals">View all</a>
-        </div>
-        <div class="card-body table-wrap">
-          <table>
-            <thead><tr>
-              <th>Referred By</th>
-              <th>Referred</th>
-              <th>Status</th>
-              <th>Date</th>
-            </tr></thead>
-            <tbody>
-              ${referrals.slice(0, 8).map(r => `
-                <tr>
-                  <td><div class="td-name">${r.referrer?.name || '—'}</div></td>
-                  <td><div class="td-name">${r.referred_name || 'Pending'}</div></td>
-                  <td>${statusBadge(r.status)}</td>
-                  <td style="color:var(--muted); white-space:nowrap;">${formatDate(r.created_at)}</td>
-                </tr>
-              `).join('') || '<tr><td colspan="4"><div class="empty-state"><p>No referrals yet</p></div></td></tr>'}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      ${renderFunnelSnapshot(systemStatus, stats)}
 
       <div class="card">
         <div class="card-header">
@@ -1246,24 +1259,8 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, trendL
           <a href="/admin/activity">View all</a>
         </div>
         <div class="activity-list">
-          ${recentActivity.slice(0, 8).map(a => {
-            const msgs = {
-              rewarded:  `<strong>${a.referrerName}</strong> earned a ${formatCurrency(a.rewardAmount)} reward`,
-              booked:    `<strong>${a.referredName}</strong> booked their first service`,
-              pending:   `New referral link clicked`,
-              completed: `<strong>${a.referredName}</strong>'s job completed — awaiting payout`,
-              rejected:  `Referral rejected`,
-            };
-            return `
-              <div class="activity-item">
-                <div class="activity-dot ${a.status}">&#8226;</div>
-                <div class="activity-text">
-                  <p>${msgs[a.status] || a.status}</p>
-                  <span>${formatDateTime(a.timestamp)}</span>
-                </div>
-              </div>
-            `;
-          }).join('') || '<div class="empty-state"><p>No activity yet</p></div>'}
+          ${(timeline || []).slice(0, 8).map(renderTimelineItem).join('')
+            || '<div class="empty-state"><p>No activity yet</p></div>'}
         </div>
       </div>
 
