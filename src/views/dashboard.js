@@ -199,7 +199,7 @@ function renderLogin(error = '') {
 </html>`;
 }
 
-function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentActivity, monthlyTrend, settings, adminUsers, currentUser, systemStatus, activeTab = 'overview' }) {
+function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentActivity, timeline, monthlyTrend, settings, adminUsers, currentUser, systemStatus, activeTab = 'overview' }) {
   const canWrite = currentUser?.role !== 'viewer';
   const navItems = [
     { id: 'overview',   label: 'Overview',       href: '/admin' },
@@ -618,9 +618,21 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
     .activity-dot.pending   { background: #fef3c7; }
     .activity-dot.completed { background: #ede9fe; }
     .activity-dot.rejected  { background: #fee2e2; }
+    .activity-dot.click     { background: #dbeafe; color: #2563eb; }
+    .activity-dot.portal    { background: #e2e8f0; color: #475569; }
+    .activity-dot.share     { background: #fef3c7; color: #b45309; }
+    .activity-dot.funnel    { background: #ede9fe; color: #7c3aed; }
     .activity-text { flex: 1; }
     .activity-text p { font-size: 13px; color: var(--text); line-height: 1.4; }
     .activity-text span { font-size: 12px; color: var(--muted); margin-top: 2px; display: block; }
+    .activity-meta { font-size: 11px; color: var(--muted); margin-left: 6px; }
+
+    /* -- Activity feed filtering -- */
+    [data-activity-filter="referral"] .activity-item:not([data-category="referral"]) { display: none; }
+    [data-activity-filter="click"]    .activity-item:not([data-category="click"])    { display: none; }
+    [data-activity-filter="portal"]   .activity-item:not([data-category="portal"])   { display: none; }
+    [data-activity-filter="share"]    .activity-item:not([data-category="share"])    { display: none; }
+    [data-activity-filter="funnel"]   .activity-item:not([data-category="funnel"])   { display: none; }
 
     /* -- Chart container -- */
     .chart-wrap {
@@ -888,7 +900,7 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
   ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) : ''}
   ${activeTab === 'referrals' ? renderReferralsTab(referrals, canWrite) : ''}
   ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || [], canWrite) : ''}
-  ${activeTab === 'activity'  ? renderActivityTab(recentActivity) : ''}
+  ${activeTab === 'activity'  ? renderActivityTab(timeline || []) : ''}
   ${activeTab === 'settings'  ? renderSettingsTab(settings || {}, adminUsers || []) : ''}
 
 </main>
@@ -1728,33 +1740,126 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
   `;
 }
 
-function renderActivityTab(recentActivity) {
+function classifyTimelineItem(item) {
+  if (item.kind === 'referral') {
+    if (item.subtype === 'pending') return 'click';
+    return 'referral';
+  }
+  if (item.subtype === 'link_click')  return 'click';
+  if (item.subtype === 'portal_view') return 'portal';
+  if (item.subtype === 'share')       return 'share';
+  return 'funnel';
+}
+
+function renderTimelineItem(item) {
+  const category = classifyTimelineItem(item);
+  const who = item.referrerName ? `<strong>${escapeHtmlText(item.referrerName)}</strong>` : '';
+  const code = item.referralCode ? ` <code style="background:var(--code-bg); padding:1px 6px; border-radius:4px; font-size:11px;">${escapeHtmlText(item.referralCode)}</code>` : '';
+
+  let line = '';
+  let badge = '';
+
+  if (item.kind === 'referral') {
+    const s = item.subtype;
+    const friend = item.referredName ? escapeHtmlText(item.referredName) : 'New customer';
+    if (s === 'rewarded')  line = `${who} earned ${formatCurrency(item.rewardAmount)} for referring <strong>${friend}</strong>`;
+    else if (s === 'booked')    line = `<strong>${friend}</strong> booked their first service — referred by ${who}`;
+    else if (s === 'completed') line = `<strong>${friend}</strong>'s job completed — referred by ${who}, awaiting payout`;
+    else if (s === 'rejected')  line = `Referral rejected — ${who}`;
+    else if (s === 'pending')   line = `${who}'s referral link clicked — awaiting booking`;
+    else                        line = `${who} — ${s}`;
+    badge = statusBadge(s);
+  } else {
+    switch (item.subtype) {
+      case 'link_click':
+        line = `Friend clicked ${who || 'a referral'} link${code}`;
+        break;
+      case 'portal_view':
+        line = `${who || 'A customer'} viewed their portal${code}`;
+        break;
+      case 'share':
+        line = `${who || 'A customer'} shared via <strong>${escapeHtmlText(item.channel || 'unknown')}</strong>${code}`;
+        break;
+      case 'scheduler_opened':
+        line = `Friend opened the scheduler${code}`;
+        break;
+      case 'slot_selected':
+        line = `Friend picked a time slot${code}`;
+        break;
+      case 'customer_info_submitted':
+        line = `Friend submitted booking info${code}`;
+        break;
+      case 'booking_confirmed':
+        line = `Friend confirmed a booking${code}`;
+        break;
+      default:
+        line = `${item.subtype}${code}`;
+    }
+  }
+
+  return `
+    <div class="activity-item" data-category="${category}">
+      <div class="activity-dot ${category}">&#8226;</div>
+      <div class="activity-text">
+        <p>${line}</p>
+        <span>${formatDateTime(item.timestamp)}</span>
+      </div>
+      <div>${badge}</div>
+    </div>
+  `;
+}
+
+function escapeHtmlText(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderActivityTab(timeline) {
+  const filters = [
+    { id: 'all',      label: 'All' },
+    { id: 'referral', label: 'Referrals' },
+    { id: 'click',    label: 'Clicks' },
+    { id: 'portal',   label: 'Portal views' },
+    { id: 'share',    label: 'Shares' },
+    { id: 'funnel',   label: 'Scheduler' },
+  ];
+
   return `
     <div class="page-header">
       <h2>Activity Feed</h2>
-      <p>Real-time referral events</p>
+      <p>Unified timeline — referral state transitions, link clicks, portal views, share actions, and scheduler funnel events.</p>
     </div>
+
+    <div class="filter-bar" id="activity-filter-bar">
+      ${filters.map((f, i) => `
+        <button type="button"
+                class="filter-btn ${i === 0 ? 'active' : ''}"
+                data-activity-filter-btn="${f.id}"
+                onclick="setActivityFilter('${f.id}')">${f.label}</button>
+      `).join('')}
+    </div>
+
     <div class="card">
-      <div class="activity-list">
-        ${recentActivity.map(a => `
-          <div class="activity-item">
-            <div class="activity-dot ${a.status}">&#8226;</div>
-            <div class="activity-text">
-              <p>
-                <strong>${a.referrerName}</strong>
-                ${a.status === 'rewarded' ? ` earned ${formatCurrency(a.rewardAmount)} for referring ${a.referredName}` : ''}
-                ${a.status === 'booked'   ? ` — ${a.referredName} booked their first service` : ''}
-                ${a.status === 'pending'  ? ` — referral link clicked, awaiting booking` : ''}
-                ${a.status === 'completed'? ` — ${a.referredName}'s job completed, awaiting payout` : ''}
-                ${a.status === 'rejected' ? ` — referral rejected` : ''}
-              </p>
-              <span>${formatDateTime(a.timestamp)}</span>
-            </div>
-            <div>${statusBadge(a.status)}</div>
-          </div>
-        `).join('') || '<div class="empty-state"><p>No activity yet</p></div>'}
+      <div class="activity-list" id="activity-list" data-activity-filter="all">
+        ${timeline.length
+          ? timeline.map(renderTimelineItem).join('')
+          : '<div class="empty-state"><p>No activity yet</p></div>'}
       </div>
     </div>
+
+    <script>
+      function setActivityFilter(id) {
+        const list = document.getElementById('activity-list');
+        if (id === 'all') list.removeAttribute('data-activity-filter');
+        else list.setAttribute('data-activity-filter', id);
+        document.querySelectorAll('[data-activity-filter-btn]').forEach(function(b) {
+          b.classList.toggle('active', b.getAttribute('data-activity-filter-btn') === id);
+        });
+      }
+    </script>
   `;
 }
 

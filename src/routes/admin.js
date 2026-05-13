@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAdmin, requireSuperAdmin, requireWriteAccess, createSession, destroySession, authenticateUser, hashPassword } = require('../middleware/adminAuth');
-const { getStats, getReferrals, getTopReferrers, getAllCustomers, getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers, getSystemStatus } = require('../services/adminData');
+const { getStats, getReferrals, getTopReferrers, getAllCustomers, getRecentActivity, getActivityTimeline, getMonthlyTrend, getSettings, getAdminUsers, getSystemStatus } = require('../services/adminData');
 const { renderLogin, renderDashboard } = require('../views/dashboard');
 const { sendRewardNotification, sendReferralInvite } = require('../services/chiirp');
 const { getAccessToken, writeReferralCodeToCustomer } = require('../services/servicetitan');
@@ -129,8 +129,11 @@ router.get('/referrers', requireAdmin, async (req, res) => {
 // ──────────────────────────────────────────────────────────────
 router.get('/activity', requireAdmin, async (req, res) => {
   try {
-    const data = await loadDashboardData();
-    res.send(renderDashboard({ ...data, currentUser: req.adminUser, activeTab: 'activity' }));
+    const [data, timeline] = await Promise.all([
+      loadDashboardData(),
+      getActivityTimeline(150),
+    ]);
+    res.send(renderDashboard({ ...data, timeline, currentUser: req.adminUser, activeTab: 'activity' }));
   } catch (err) {
     console.error('[Admin] Activity error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);

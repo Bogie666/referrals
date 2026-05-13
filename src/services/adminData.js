@@ -165,6 +165,53 @@ async function getRecentActivity(limit = 20) {
 }
 
 /**
+ * Unified timeline: referral state transitions + tracking_events,
+ * merged by timestamp. Used by the /admin/activity tab so the feed
+ * shows clicks, portal views, shares, and scheduler-funnel events
+ * alongside booked / completed / rewarded transitions.
+ */
+async function getActivityTimeline(limit = 100) {
+  const [{ data: referrals }, { data: events }] = await Promise.all([
+    supabase
+      .from('referrals')
+      .select('id, referred_name, status, reward_amount, updated_at, created_at, referrer:referrer_id(name)')
+      .order('updated_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('tracking_events')
+      .select('id, event_type, referral_code, channel, session_id, referer, created_at, referrer:referrer_id(name)')
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  ]);
+
+  const refItems = (referrals || []).map(r => ({
+    kind:         'referral',
+    id:           r.id,
+    timestamp:    r.updated_at || r.created_at,
+    subtype:      r.status,
+    referrerName: r.referrer?.name || 'Unknown',
+    referredName: r.referred_name || null,
+    rewardAmount: r.reward_amount,
+  }));
+
+  const eventItems = (events || []).map(e => ({
+    kind:         'tracking',
+    id:           e.id,
+    timestamp:    e.created_at,
+    subtype:      e.event_type,
+    referrerName: e.referrer?.name || null,
+    referralCode: e.referral_code,
+    channel:      e.channel,
+    sessionId:    e.session_id,
+    referer:      e.referer,
+  }));
+
+  return [...refItems, ...eventItems]
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, limit);
+}
+
+/**
  * Monthly referral trend — last 6 months.
  */
 async function getMonthlyTrend() {
@@ -317,5 +364,5 @@ async function getSystemStatus() {
 
 module.exports = {
   getStats, getReferrals, getPayoutForReferral, getTopReferrers, getAllCustomers,
-  getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers, getSystemStatus,
+  getRecentActivity, getActivityTimeline, getMonthlyTrend, getSettings, getAdminUsers, getSystemStatus,
 };
