@@ -43,6 +43,81 @@ function formatDateTime(iso) {
   });
 }
 
+function formatRelative(iso) {
+  if (!iso) return 'never';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diff / 60000);
+  if (mins < 1)    return 'just now';
+  if (mins < 60)   return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24)    return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
+}
+
+function renderStatusStrip(systemStatus) {
+  if (!systemStatus) return '';
+  const { poller, chiirp } = systemStatus;
+
+  const pollerDetail = poller.lastPolledAt
+    ? `${formatRelative(poller.lastPolledAt)} · ${poller.jobsLast24h} job${poller.jobsLast24h === 1 ? '' : 's'}/24h`
+    : 'no runs recorded';
+
+  const chiirpDetail = chiirp.lastSendAt
+    ? (chiirp.status === 'red'
+        ? `last send failed · ${formatRelative(chiirp.lastSendAt)}`
+        : `last send ${formatRelative(chiirp.lastSendAt)}`)
+    : 'no recent sends';
+
+  const chiirpRows = (chiirp.recent || []).length
+    ? chiirp.recent.map(r => `
+        <div class="status-panel__row ${r.status === 'failed' ? 'status-panel__row--failed' : ''}">
+          <span style="font-weight:600;">${r.phone || '—'}</span>
+          <span class="status-panel__msg">${r.message ? r.message.replace(/</g, '&lt;') : ''}</span>
+          <span style="color:var(--muted); font-size:12px;">${formatRelative(r.sentAt)}</span>
+          <span style="font-weight:600; color:${r.status === 'failed' ? '#ef4444' : 'var(--green)'};">${r.status}</span>
+        </div>
+      `).join('')
+    : '<div class="status-panel__empty">No webhook activity yet.</div>';
+
+  return `
+    <div class="status-strip">
+      <button type="button" class="status-pill" onclick="toggleStatusPanel('poller-panel')">
+        <span class="status-pill__dot status-pill__dot--${poller.status}"></span>
+        <span class="status-pill__label">Poller</span>
+        <span class="status-pill__detail">${pollerDetail}</span>
+      </button>
+      <button type="button" class="status-pill" onclick="toggleStatusPanel('chiirp-panel')">
+        <span class="status-pill__dot status-pill__dot--${chiirp.status}"></span>
+        <span class="status-pill__label">Chiirp</span>
+        <span class="status-pill__detail">${chiirpDetail}</span>
+      </button>
+    </div>
+    <div class="status-panel" id="poller-panel">
+      <h4>Poller</h4>
+      <div class="status-panel__row">
+        <span>Last run</span>
+        <span class="status-panel__msg">${poller.lastPolledAt ? formatDateTime(poller.lastPolledAt) : 'never'}</span>
+        <span style="color:var(--muted); font-size:12px;">${poller.minutesSincePoll !== null ? poller.minutesSincePoll + ' min ago' : '—'}</span>
+      </div>
+      <div class="status-panel__row">
+        <span>Jobs processed (24h)</span>
+        <span class="status-panel__msg"></span>
+        <span style="font-weight:600;">${poller.jobsLast24h}</span>
+      </div>
+      <div class="status-panel__row">
+        <span>Cron schedule</span>
+        <span class="status-panel__msg">Vercel cron, hourly at :00 UTC</span>
+        <span></span>
+      </div>
+    </div>
+    <div class="status-panel" id="chiirp-panel">
+      <h4>Chiirp — last 10 webhook sends</h4>
+      ${chiirpRows}
+    </div>
+  `;
+}
+
 function renderLogin(error = '') {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -97,7 +172,7 @@ function renderLogin(error = '') {
 </html>`;
 }
 
-function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentActivity, monthlyTrend, settings, adminUsers, currentUser, activeTab = 'overview' }) {
+function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentActivity, monthlyTrend, settings, adminUsers, currentUser, systemStatus, activeTab = 'overview' }) {
   const canWrite = currentUser?.role !== 'viewer';
   const navItems = [
     { id: 'overview',   label: 'Overview',       href: '/admin' },
@@ -325,6 +400,63 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
     .stat-card.green .stat-value { color: var(--green); }
     .stat-card.orange .stat-value { color: var(--orange); }
     .stat-card.navy .stat-value { color: var(--navy); }
+
+    /* -- System status strip -- */
+    .status-strip {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .status-pill:hover { background: var(--row-hover); }
+    .status-pill__dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #94a3b8;
+      box-shadow: 0 0 0 3px rgba(148,163,184,0.18);
+    }
+    .status-pill__dot--green  { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.18); }
+    .status-pill__dot--yellow { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.20); }
+    .status-pill__dot--red    { background: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.20); }
+    .status-pill__label { font-weight: 600; }
+    .status-pill__detail { color: var(--muted); font-size: 12px; }
+
+    .status-panel {
+      display: none;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-bottom: 24px;
+      font-size: 13px;
+    }
+    .status-panel.open { display: block; }
+    .status-panel h4 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+    .status-panel__row {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .status-panel__row:last-child { border-bottom: none; }
+    .status-panel__row--failed { color: #ef4444; }
+    .status-panel__row .status-panel__msg {
+      flex: 1; color: var(--muted); font-size: 12px; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+    .status-panel__empty { color: var(--muted); padding: 8px 0; }
 
     /* -- Pipeline bar -- */
     .pipeline-card {
@@ -724,6 +856,8 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
 <!-- -- Main -- -->
 <main class="main">
 
+  ${renderStatusStrip(systemStatus)}
+
   ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, trendLabels, trendCreated, trendRewarded }) : ''}
   ${activeTab === 'referrals' ? renderReferralsTab(referrals, canWrite) : ''}
   ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || [], canWrite) : ''}
@@ -887,6 +1021,16 @@ async function submitPayout() {
     btn.textContent = 'Record Payout';
     btn.disabled = false;
   }
+}
+
+// -- System status panel toggle --
+function toggleStatusPanel(id) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  document.querySelectorAll('.status-panel').forEach(function(p) {
+    if (p !== target) p.classList.remove('open');
+  });
+  target.classList.toggle('open');
 }
 
 // -- Mobile sidebar toggle --

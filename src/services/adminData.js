@@ -220,7 +220,80 @@ async function getAdminUsers() {
   return data || [];
 }
 
+/**
+ * System health: poller liveness + recent Chiirp webhook outcomes.
+ * Read-only; safe to poll on every dashboard load.
+ */
+async function getSystemStatus() {
+  const now = Date.now();
+
+  const { data: pollRow } = await supabase
+    .from('poll_state')
+    .select('last_polled_at, updated_at')
+    .eq('id', 'main')
+    .maybeSingle();
+
+  const lastPolledAt = pollRow?.last_polled_at || null;
+  const minutesSincePoll = lastPolledAt
+    ? Math.floor((now - new Date(lastPolledAt).getTime()) / 60000)
+    : null;
+
+  let pollerStatus = 'unknown';
+  if (minutesSincePoll === null)       pollerStatus = 'unknown';
+  else if (minutesSincePoll <= 90)     pollerStatus = 'green';
+  else if (minutesSincePoll <= 180)    pollerStatus = 'yellow';
+  else                                  pollerStatus = 'red';
+
+  const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+  const { data: recentJobs } = await supabase
+    .from('job_events')
+    .select('event_type, created_at')
+    .gte('created_at', since24h)
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  const jobsLast24h = (recentJobs || []).length;
+
+  const { data: recentTexts } = await supabase
+    .from('texts_log')
+    .select('id, phone, message, status, sent_at')
+    .order('sent_at', { ascending: false })
+    .limit(10);
+
+  const texts = recentTexts || [];
+  const lastSuccess = texts.find(t => t.status === 'sent') || null;
+  const lastFailure = texts.find(t => t.status === 'failed') || null;
+  const mostRecent  = texts[0] || null;
+
+  let chiirpStatus = 'unknown';
+  if (!mostRecent)                                          chiirpStatus = 'unknown';
+  else if (mostRecent.status === 'failed')                  chiirpStatus = 'red';
+  else if (lastFailure
+           && new Date(lastFailure.sent_at).getTime() > now - 24 * 60 * 60 * 1000) chiirpStatus = 'yellow';
+  else                                                       chiirpStatus = 'green';
+
+  return {
+    poller: {
+      status: pollerStatus,
+      lastPolledAt,
+      minutesSincePoll,
+      jobsLast24h,
+    },
+    chiirp: {
+      status: chiirpStatus,
+      lastSendAt: mostRecent?.sent_at || null,
+      lastFailureAt: lastFailure?.sent_at || null,
+      recent: texts.map(t => ({
+        phone: t.phone,
+        status: t.status,
+        sentAt: t.sent_at,
+        message: (t.message || '').slice(0, 200),
+      })),
+    },
+  };
+}
+
 module.exports = {
   getStats, getReferrals, getPayoutForReferral, getTopReferrers, getAllCustomers,
-  getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers,
+  getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers, getSystemStatus,
 };

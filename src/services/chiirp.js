@@ -54,7 +54,19 @@ async function sendText({ to, message, customerId = null, referralId = null, web
     console.log(`[Chiirp] Webhook triggered for ${to}`);
     return { success: true };
   } catch (err) {
-    console.error('[Chiirp] Webhook failed:', err.response?.data || err.message);
+    const errMsg = err.response?.data
+      ? (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data))
+      : err.message;
+    console.error('[Chiirp] Webhook failed:', errMsg);
+
+    await supabase.from('texts_log').insert({
+      customer_id: customerId,
+      referral_id: referralId,
+      phone: to,
+      message: `${message} — FAILED: ${errMsg}`.slice(0, 2000),
+      status: 'failed',
+    });
+
     return { success: false, error: err.message };
   }
 }
