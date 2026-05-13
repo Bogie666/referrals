@@ -57,15 +57,16 @@ router.get('/logout', (req, res) => {
 // Load shared data for all dashboard pages
 // ──────────────────────────────────────────────────────────────
 async function loadDashboardData() {
-  const [stats, { referrals }, topReferrers, recentActivity, monthlyTrend, systemStatus] = await Promise.all([
+  const [stats, { referrals }, topReferrers, recentActivity, timeline, monthlyTrend, systemStatus] = await Promise.all([
     getStats(),
     getReferrals({ limit: 100 }),
     getTopReferrers(20),
     getRecentActivity(30),
+    getActivityTimeline(150),
     getMonthlyTrend(),
     getSystemStatus(),
   ]);
-  return { stats, referrals, topReferrers, recentActivity, monthlyTrend, systemStatus };
+  return { stats, referrals, topReferrers, recentActivity, timeline, monthlyTrend, systemStatus };
 }
 
 router.get('/api/status', requireAdmin, async (req, res) => {
@@ -129,11 +130,8 @@ router.get('/referrers', requireAdmin, async (req, res) => {
 // ──────────────────────────────────────────────────────────────
 router.get('/activity', requireAdmin, async (req, res) => {
   try {
-    const [data, timeline] = await Promise.all([
-      loadDashboardData(),
-      getActivityTimeline(150),
-    ]);
-    res.send(renderDashboard({ ...data, timeline, currentUser: req.adminUser, activeTab: 'activity' }));
+    const data = await loadDashboardData();
+    res.send(renderDashboard({ ...data, currentUser: req.adminUser, activeTab: 'activity' }));
   } catch (err) {
     console.error('[Admin] Activity error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
