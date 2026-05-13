@@ -416,12 +416,14 @@ function lex_referral_portal_shortcode() {
 
           <div class="lex-portal-link-row">
             <input type="text" id="lex-portal-link-input" readonly />
-            <button onclick="lexPortalCopyLink()" id="lex-copy-btn">Copy Link</button>
+            <button onclick="lexPortalCopyLink(); beaconShare('copy');" id="lex-copy-btn">Copy Link</button>
           </div>
 
           <div class="lex-portal-share-buttons">
-            <a id="lex-portal-sms-btn" href="#" class="lex-portal-share-btn lex-share-sms">💬 Text a Friend</a>
-            <a id="lex-portal-email-btn" href="#" class="lex-portal-share-btn lex-share-email">✉️ Send Email</a>
+            <a id="lex-portal-sms-btn" href="#" onclick="beaconShare('sms');"
+               class="lex-portal-share-btn lex-share-sms">💬 Text a Friend</a>
+            <a id="lex-portal-email-btn" href="#" onclick="beaconShare('email');"
+               class="lex-portal-share-btn lex-share-email">✉️ Send Email</a>
             <button onclick="lexPortalNativeShare()" id="lex-portal-native-share"
                     class="lex-portal-share-btn lex-share-more" style="display:none;">↑ More</button>
           </div>
@@ -685,6 +687,7 @@ function lex_referral_portal_shortcode() {
           populatePortal(data);
           if (data.isNew) showWelcomeBanner(data.name);
           showScreen('lex-portal-main');
+          beaconPortalView(data.referralCode);
 
         } catch (err) {
           showScreen('lex-portal-notfound');
@@ -825,6 +828,7 @@ function lex_referral_portal_shortcode() {
       window.lexPortalCopyCode = function() {
         const code = document.getElementById('lex-portal-code-display').textContent;
         navigator.clipboard.writeText(code).catch(() => {});
+        beaconShare('copy_code');
         const btn = document.getElementById('lex-copy-code-btn');
         btn.textContent = '✅ Copied!';
         setTimeout(() => { btn.textContent = 'Copy Code'; }, 2000);
@@ -832,6 +836,7 @@ function lex_referral_portal_shortcode() {
 
       window.lexPortalNativeShare = async function() {
         if (!currentData || !navigator.share) return;
+        beaconShare('native');
         try {
           await navigator.share({
             title: 'Save on LEX Air Conditioning',
@@ -840,6 +845,30 @@ function lex_referral_portal_shortcode() {
           });
         } catch (err) {}
       };
+
+      function beaconShare(channel) {
+        if (!currentData || !currentData.referralCode) return;
+        try {
+          fetch(API + '/api/share/event', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body:    JSON.stringify({ code: currentData.referralCode, channel: channel }),
+          }).catch(() => {});
+        } catch (e) {}
+      }
+
+      function beaconPortalView(code) {
+        if (!code) return;
+        try {
+          fetch(API + '/api/portal/view', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body:    JSON.stringify({ code: code }),
+          }).catch(() => {});
+        } catch (e) {}
+      }
 
       window.lexPortalReset = function() {
         currentData = null;

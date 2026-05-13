@@ -272,6 +272,23 @@ async function getSystemStatus() {
            && new Date(lastFailure.sent_at).getTime() > now - 24 * 60 * 60 * 1000) chiirpStatus = 'yellow';
   else                                                       chiirpStatus = 'green';
 
+  const { data: recentEvents } = await supabase
+    .from('tracking_events')
+    .select('event_type, created_at')
+    .gte('created_at', since24h);
+
+  const counts = {
+    portal_view: 0, share: 0, link_click: 0,
+    scheduler_opened: 0, slot_selected: 0,
+    customer_info_submitted: 0, booking_confirmed: 0,
+  };
+  (recentEvents || []).forEach(e => {
+    if (counts[e.event_type] !== undefined) counts[e.event_type]++;
+  });
+
+  const trackingTotal = Object.values(counts).reduce((a, b) => a + b, 0);
+  const trackingStatus = trackingTotal > 0 ? 'green' : 'unknown';
+
   return {
     poller: {
       status: pollerStatus,
@@ -289,6 +306,11 @@ async function getSystemStatus() {
         sentAt: t.sent_at,
         message: (t.message || '').slice(0, 200),
       })),
+    },
+    tracking: {
+      status: trackingStatus,
+      total24h: trackingTotal,
+      counts,
     },
   };
 }

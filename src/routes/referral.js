@@ -18,8 +18,12 @@
 
 const express = require('express');
 const router  = express.Router();
+const crypto = require('crypto');
 const supabase = require('../db');
 const { normalizeCode } = require('../utils/slugs');
+
+const SESSION_COOKIE = 'lex_sid';
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const LEX_PHONE = '(972) 466-1917';
 const LEX_PHONE_TEL = '9724661917';
@@ -94,6 +98,16 @@ router.get('/', async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   const rawInput = req.query.r ? String(req.query.r) : '';
+
+  if (!req.cookies?.[SESSION_COOKIE]) {
+    res.cookie(SESSION_COOKIE, crypto.randomUUID(), {
+      httpOnly: false,
+      secure:   process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge:   SESSION_MAX_AGE_MS,
+      path:     '/',
+    });
+  }
 
   const [customer, settings] = await Promise.all([
     loadCustomerByCodeOrSlug(rawInput),

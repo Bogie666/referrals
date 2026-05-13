@@ -8,6 +8,9 @@ const BOOKING_API   = 'https://scheduler-mu-three.vercel.app/api/lex-booking';
 router.get('/', (req, res) => {
   const slug         = req.query.r     ? String(req.query.r).trim()                  : '';
   const referralCode = req.query.code  ? String(req.query.code).trim().toUpperCase() : '';
+  const sessionId    = req.cookies?.lex_sid && /^[a-f0-9-]{8,64}$/i.test(req.cookies.lex_sid)
+    ? req.cookies.lex_sid
+    : '';
   const showBanner   = slug || referralCode;
 
   const banner = showBanner
@@ -51,7 +54,9 @@ router.get('/', (req, res) => {
     + '      buttonText: "Book Now",\n'
     + '      position: "bottom-right",\n'
     + '      referralSlug: "' + slug + '",\n'
-    + '      referralCode: "' + referralCode + '"\n'
+    + '      referralCode: "' + referralCode + '",\n'
+    + '      sessionId: "' + sessionId + '",\n'
+    + '      funnelEndpoint: "https://lexperks.com/api/funnel/event"\n'
     + '    };\n'
     + '\n'
     + '    window.addEventListener("load", function() {\n'

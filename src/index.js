@@ -67,6 +67,7 @@ app.use(cors({
     'https://www.lexairconditioning.com',
     'https://lexperks.com',
     'https://www.lexperks.com',
+    'https://scheduler-mu-three.vercel.app',
     'http://localhost:3000',
   ],
   methods: ['GET', 'POST', 'OPTIONS'],
