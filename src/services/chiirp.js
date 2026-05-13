@@ -35,7 +35,7 @@ async function sendText({ to, message, customerId = null, referralId = null, web
     const response = await axios.post(
       CHIIRP_WEBHOOK_URL,
       {
-        phone: to,
+        phone_number: to,
         ...webhookData,
       },
       {
@@ -78,7 +78,7 @@ async function sendReferralInvite(customer) {
     webhookData: {
       first_name:    firstName,
       last_name:     lastName,
-      email:         email || '',
+      email_address: email || '',
       referral_code: referral_code || '',
       referral_link: referral_link || '',
       share_link:    buildShareLink(referral_code),
@@ -105,7 +105,7 @@ async function sendRewardNotification(customer, referredName, amount, paymentMet
     webhookData: {
       first_name:     firstName,
       last_name:      lastName,
-      email:          customer.email || '',
+      email_address:  customer.email || '',
       referred_name:  referredFirst,
       reward_amount:  String(amount),
       payment_method: paymentMethod,
