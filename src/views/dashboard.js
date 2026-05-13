@@ -57,7 +57,7 @@ function formatRelative(iso) {
 
 function renderStatusStrip(systemStatus) {
   if (!systemStatus) return '';
-  const { poller, chiirp } = systemStatus;
+  const { poller, chiirp, tracking } = systemStatus;
 
   const pollerDetail = poller.lastPolledAt
     ? `${formatRelative(poller.lastPolledAt)} · ${poller.jobsLast24h} job${poller.jobsLast24h === 1 ? '' : 's'}/24h`
@@ -68,6 +68,18 @@ function renderStatusStrip(systemStatus) {
         ? `last send failed · ${formatRelative(chiirp.lastSendAt)}`
         : `last send ${formatRelative(chiirp.lastSendAt)}`)
     : 'no recent sends';
+
+  const trackingDetail = tracking
+    ? `${tracking.total24h} event${tracking.total24h === 1 ? '' : 's'}/24h`
+    : 'no events';
+
+  const funnelRow = (label, key) => `
+    <div class="status-panel__row">
+      <span>${label}</span>
+      <span class="status-panel__msg"></span>
+      <span style="font-weight:600;">${tracking?.counts?.[key] ?? 0}</span>
+    </div>
+  `;
 
   const chiirpRows = (chiirp.recent || []).length
     ? chiirp.recent.map(r => `
@@ -92,6 +104,11 @@ function renderStatusStrip(systemStatus) {
         <span class="status-pill__label">Chiirp</span>
         <span class="status-pill__detail">${chiirpDetail}</span>
       </button>
+      <button type="button" class="status-pill" onclick="toggleStatusPanel('tracking-panel')">
+        <span class="status-pill__dot status-pill__dot--${tracking?.status || 'unknown'}"></span>
+        <span class="status-pill__label">Tracking</span>
+        <span class="status-pill__detail">${trackingDetail}</span>
+      </button>
     </div>
     <div class="status-panel" id="poller-panel">
       <h4>Poller</h4>
@@ -114,6 +131,16 @@ function renderStatusStrip(systemStatus) {
     <div class="status-panel" id="chiirp-panel">
       <h4>Chiirp — last 10 webhook sends</h4>
       ${chiirpRows}
+    </div>
+    <div class="status-panel" id="tracking-panel">
+      <h4>Tracking — events in the last 24h</h4>
+      ${funnelRow('Portal views (referrer)', 'portal_view')}
+      ${funnelRow('Share clicks (referrer)', 'share')}
+      ${funnelRow('Link clicks (friend)', 'link_click')}
+      ${funnelRow('Scheduler opened', 'scheduler_opened')}
+      ${funnelRow('Slot selected', 'slot_selected')}
+      ${funnelRow('Customer info submitted', 'customer_info_submitted')}
+      ${funnelRow('Booking confirmed', 'booking_confirmed')}
     </div>
   `;
 }

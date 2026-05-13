@@ -1,8 +1,32 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const supabase = require('../db');
 const { DEFAULTS: PAYOUT_DEFAULTS } = require('../utils/payout');
 const { normalizeCode } = require('../utils/slugs');
+const {
+  SHARE_CHANNELS,
+  resolveReferrerByCode,
+  extractRequestContext,
+  recordEvent,
+} = require('../services/tracking');
+
+const SESSION_COOKIE = 'lex_sid';
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function readOrMintSession(req, res) {
+  const existing = req.cookies?.[SESSION_COOKIE];
+  if (existing && /^[a-f0-9-]{8,64}$/i.test(existing)) return existing;
+  const sid = crypto.randomUUID();
+  res.cookie(SESSION_COOKIE, sid, {
+    httpOnly: false,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge:   SESSION_MAX_AGE_MS,
+    path:     '/',
+  });
+  return sid;
+}
 
 async function getPortalPayoutInfo() {
   const { data } = await supabase
@@ -58,24 +82,29 @@ router.get('/referral/:slugOrCode', async (req, res) => {
 
 // ──────────────────────────────────────────────────────────────
 // POST /api/referral/click
-// Called when someone lands on the referral page.
-// Creates a "pending" referral record so we can track clicks.
-// Deduplicates: only one pending referral per referrer at a time.
+// Called when a friend lands on /referral?r=CODE.
+// Records every click as a tracking_event (no dedup), and still
+// keeps the existing single-pending-referral row per referrer so
+// the dashboard pipeline state machine stays unchanged.
 // ──────────────────────────────────────────────────────────────
 router.post('/referral/click', async (req, res) => {
-  const { slug } = req.body;
+  const { slug, channel } = req.body;
   if (!slug) return res.status(400).json({ error: 'Missing slug' });
-  const normalized = normalizeCode(slug);
 
-  const { data: customer } = await supabase
-    .from('customers')
-    .select('id')
-    .or(`referral_slug.eq.${slug},referral_code.eq.${normalized}`)
-    .single();
-
+  const customer = await resolveReferrerByCode(slug);
   if (!customer) return res.status(404).json({ error: 'Invalid referral link' });
 
-  // Check for existing pending referral from this referrer
+  const sessionId = readOrMintSession(req, res);
+
+  await recordEvent({
+    eventType:      'link_click',
+    code:           slug,
+    referrerId:     customer.id,
+    channel:        channel || null,
+    sessionId,
+    requestContext: extractRequestContext(req),
+  });
+
   const { data: existingPending } = await supabase
     .from('referrals')
     .select('id')
@@ -85,13 +114,103 @@ router.post('/referral/click', async (req, res) => {
     .single();
 
   if (existingPending) {
-    // Already have a pending click — don't create a duplicate
-    return res.json({ success: true, deduplicated: true });
+    return res.json({ success: true, deduplicated: true, session_id: sessionId });
   }
 
   await supabase.from('referrals').insert({
     referrer_id: customer.id,
     status: 'pending',
+  });
+
+  res.json({ success: true, session_id: sessionId });
+});
+
+// ──────────────────────────────────────────────────────────────
+// POST /api/share/event
+// Fired by share buttons (sms, email, copy, copy_code, qr, native)
+// before the browser navigates / invokes the share intent.
+// ──────────────────────────────────────────────────────────────
+router.post('/share/event', async (req, res) => {
+  const { code, channel } = req.body || {};
+  if (!code)    return res.status(400).json({ error: 'Missing code' });
+  if (!channel || !SHARE_CHANNELS.has(channel)) {
+    return res.status(400).json({ error: 'Missing or invalid channel' });
+  }
+
+  const customer = await resolveReferrerByCode(code);
+  if (!customer) return res.status(404).json({ error: 'Invalid referral code' });
+
+  const sessionId = req.cookies?.[SESSION_COOKIE] || null;
+
+  await recordEvent({
+    eventType:      'share',
+    code,
+    referrerId:     customer.id,
+    channel,
+    sessionId,
+    requestContext: extractRequestContext(req),
+  });
+
+  res.json({ success: true });
+});
+
+// ──────────────────────────────────────────────────────────────
+// POST /api/portal/view
+// Fired when the customer portal renders. Used by the WP shortcode;
+// the Node /share/:code route logs portal_view server-side too.
+// ──────────────────────────────────────────────────────────────
+router.post('/portal/view', async (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'Missing code' });
+
+  const customer = await resolveReferrerByCode(code);
+  if (!customer) return res.status(404).json({ error: 'Invalid referral code' });
+
+  await recordEvent({
+    eventType:      'portal_view',
+    code,
+    referrerId:     customer.id,
+    sessionId:      req.cookies?.[SESSION_COOKIE] || null,
+    requestContext: extractRequestContext(req),
+  });
+
+  res.json({ success: true });
+});
+
+// ──────────────────────────────────────────────────────────────
+// POST /api/funnel/event
+// Called by the external scheduler at scheduler-mu-three.vercel.app
+// to record the friend's scheduler funnel. Accepted event types:
+//   scheduler_opened | slot_selected | customer_info_submitted | booking_confirmed
+// Body: { type, code?, session_id?, metadata? }
+// ──────────────────────────────────────────────────────────────
+const FUNNEL_TYPES = new Set([
+  'scheduler_opened',
+  'slot_selected',
+  'customer_info_submitted',
+  'booking_confirmed',
+]);
+
+router.post('/funnel/event', async (req, res) => {
+  const { type, code, session_id: sessionId, metadata } = req.body || {};
+
+  if (!type || !FUNNEL_TYPES.has(type)) {
+    return res.status(400).json({ error: 'Missing or invalid type' });
+  }
+
+  let referrerId = null;
+  if (code) {
+    const customer = await resolveReferrerByCode(code);
+    referrerId = customer?.id || null;
+  }
+
+  await recordEvent({
+    eventType:      type,
+    code:           code || null,
+    referrerId,
+    sessionId:      sessionId || req.cookies?.[SESSION_COOKIE] || null,
+    metadata:       metadata || null,
+    requestContext: extractRequestContext(req),
   });
 
   res.json({ success: true });

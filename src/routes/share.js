@@ -22,6 +22,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../db');
 const { normalizeCode } = require('../utils/slugs');
+const { recordEvent, extractRequestContext } = require('../services/tracking');
 
 const REFERRAL_BASE_URL = process.env.REFERRAL_BASE_URL || 'https://lexperks.com/referral';
 const SHARE_BASE_URL    = (process.env.REFERRAL_BASE_URL ? new URL(process.env.REFERRAL_BASE_URL).origin : 'https://lexperks.com');
@@ -196,6 +197,13 @@ router.get('/share/:code', async (req, res) => {
   const referrals = await loadReferrals(customer.id);
   const stats = computeStats(customer, referrals);
 
+  recordEvent({
+    eventType:      'portal_view',
+    code:           customer.referral_code,
+    referrerId:     customer.id,
+    requestContext: extractRequestContext(req),
+  }).catch(() => {});
+
   res.send(renderPage({ mode: 'auth', settings, customer, referrals, stats }));
 });
 
@@ -353,12 +361,12 @@ function renderAuthBody({ settings, customer, referrals, stats }) {
     <div class="preview" id="preview-text"></div>
 
     <div class="actions">
-      <a class="btn btn-primary" href="#" id="share-sms">💬 Text a friend</a>
-      <a class="btn btn-secondary" href="#" id="share-email">✉️ Send by email</a>
+      <a class="btn btn-primary" href="#" id="share-sms" onclick="beaconShare('sms')">💬 Text a friend</a>
+      <a class="btn btn-secondary" href="#" id="share-email" onclick="beaconShare('email')">✉️ Send by email</a>
       <button class="btn btn-tertiary" onclick="nativeShare()">🔗 Share via apps</button>
     </div>
 
-    <div class="code-box" onclick="copyCode()" style="margin-top:18px; margin-bottom:0;">
+    <div class="code-box" onclick="copyCode(); beaconShare('copy_code');" style="margin-top:18px; margin-bottom:0;">
       <div class="code-label">Your code · tap to copy</div>
       <div class="code-value">${escapeHtml(code)}</div>
       <div class="code-hint">Or have friends mention this code when they call</div>
@@ -366,7 +374,7 @@ function renderAuthBody({ settings, customer, referrals, stats }) {
 
     <div class="copy-row">
       <input type="text" class="copy-input" id="link-input" value="${escapeHtml(link)}" readonly />
-      <button class="copy-btn" onclick="copyLink()">Copy link</button>
+      <button class="copy-btn" onclick="copyLink(); beaconShare('copy');">Copy link</button>
     </div>
 
     <button class="qr-toggle" onclick="toggleQR()" id="qr-toggle">
@@ -562,11 +570,23 @@ function copyCode() {
 
 function nativeShare() {
   const body = VARIANTS[currentStyle];
+  beaconShare('native');
   if (navigator.share) {
     navigator.share({ text: body, url: LINK }).catch(function() {});
   } else {
     copyLink();
   }
+}
+
+function beaconShare(channel) {
+  try {
+    fetch('/api/share/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({ code: CODE, channel: channel }),
+    }).catch(function() {});
+  } catch (e) {}
 }
 
 let toastTimer;
@@ -581,6 +601,7 @@ function showToast(msg) {
 function toggleQR() {
   const panel = document.getElementById('qr-panel');
   const toggle = document.getElementById('qr-toggle');
+  const opening = !panel.classList.contains('open');
   panel.classList.toggle('open');
   toggle.classList.toggle('open');
   if (panel.classList.contains('open') && !document.getElementById('qr-img').hasChildNodes()) {
@@ -591,6 +612,7 @@ function toggleQR() {
       document.getElementById('qr-img').innerHTML = qr.createImgTag(5, 4);
     }
   }
+  if (opening) beaconShare('qr');
 }
 
 function signOut() {
