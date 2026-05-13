@@ -230,7 +230,7 @@ async function getSystemStatus() {
   const { data: pollRow } = await supabase
     .from('poll_state')
     .select('last_polled_at, updated_at')
-    .eq('id', 'main')
+    .eq('id', 'jobs')
     .maybeSingle();
 
   const lastPolledAt = pollRow?.last_polled_at || null;
