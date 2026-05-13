@@ -129,12 +129,18 @@ function formatCurrency(n) {
 
 function formatDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    timeZone: 'America/Chicago',
+  });
 }
 
 function memberSince(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short', year: 'numeric',
+    timeZone: 'America/Chicago',
+  });
 }
 
 function formatFriendName(fullName) {

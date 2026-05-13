@@ -33,13 +33,17 @@ function formatPhone(raw) {
 
 function formatDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    timeZone: 'America/Chicago',
+  });
 }
 
 function formatDateTime(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+    timeZone: 'America/Chicago',
   });
 }
 

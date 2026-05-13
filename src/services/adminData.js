@@ -221,7 +221,7 @@ async function getMonthlyTrend() {
     d.setMonth(d.getMonth() - i);
     const year = d.getFullYear();
     const month = d.getMonth();
-    const label = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+    const label = d.toLocaleString('en-US', { month: 'short', year: '2-digit', timeZone: 'America/Chicago' });
 
     const start = new Date(year, month, 1).toISOString();
     const end = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
