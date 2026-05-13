@@ -479,7 +479,17 @@ async function sendChiirpInvite({ name, phone, email, referralCode, referralLink
       });
     }
   } catch (err) {
-    console.error('[Poller] Chiirp webhook failed:', err.response?.data || err.message);
+    const errMsg = err.response?.data
+      ? (typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data))
+      : err.message;
+    console.error('[Poller] Chiirp webhook failed:', errMsg);
+
+    await supabase.from('texts_log').insert({
+      customer_id: customerId || null,
+      phone,
+      message: `Referral invite FAILED via Chiirp — code: ${referralCode} — ${errMsg}`.slice(0, 2000),
+      status: 'failed',
+    });
   }
 }
 

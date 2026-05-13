@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAdmin, requireSuperAdmin, requireWriteAccess, createSession, destroySession, authenticateUser, hashPassword } = require('../middleware/adminAuth');
-const { getStats, getReferrals, getTopReferrers, getAllCustomers, getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers } = require('../services/adminData');
+const { getStats, getReferrals, getTopReferrers, getAllCustomers, getRecentActivity, getMonthlyTrend, getSettings, getAdminUsers, getSystemStatus } = require('../services/adminData');
 const { renderLogin, renderDashboard } = require('../views/dashboard');
 const { sendRewardNotification, sendReferralInvite } = require('../services/chiirp');
 const { getAccessToken, writeReferralCodeToCustomer } = require('../services/servicetitan');
@@ -57,15 +57,26 @@ router.get('/logout', (req, res) => {
 // Load shared data for all dashboard pages
 // ──────────────────────────────────────────────────────────────
 async function loadDashboardData() {
-  const [stats, { referrals }, topReferrers, recentActivity, monthlyTrend] = await Promise.all([
+  const [stats, { referrals }, topReferrers, recentActivity, monthlyTrend, systemStatus] = await Promise.all([
     getStats(),
     getReferrals({ limit: 100 }),
     getTopReferrers(20),
     getRecentActivity(30),
     getMonthlyTrend(),
+    getSystemStatus(),
   ]);
-  return { stats, referrals, topReferrers, recentActivity, monthlyTrend };
+  return { stats, referrals, topReferrers, recentActivity, monthlyTrend, systemStatus };
 }
+
+router.get('/api/status', requireAdmin, async (req, res) => {
+  try {
+    const status = await getSystemStatus();
+    res.json(status);
+  } catch (err) {
+    console.error('[Admin] Status error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ──────────────────────────────────────────────────────────────
 // GET /admin  (Overview)
