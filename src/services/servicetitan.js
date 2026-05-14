@@ -121,6 +121,58 @@ async function getCompletedJobs(token, completedOnOrAfter) {
   }
 }
 
+// ── Get recently-created jobs (any status) ────────────────────
+/**
+ * Used by the bookings poller — we don't filter by jobStatus because
+ * a job's status can move quickly (Scheduled → Dispatched → Working
+ * → Completed) and we want to catch every newly-created one, then
+ * read its "Referred by Code" custom field. Caller filters out
+ * canceled jobs / non-matches in the handler.
+ */
+async function getRecentJobs(token, createdOnOrAfter) {
+  if (process.env.DEMO_MODE === 'true') {
+    console.log('[DEMO] Skipping ST recent-jobs poll');
+    return [];
+  }
+
+  const allJobs = [];
+  let page = 1;
+  const pageSize = 50;
+
+  try {
+    while (true) {
+      const res = await axios.get(
+        `${ST_API_BASE}/jpm/v2/tenant/${TENANT_ID}/jobs`,
+        {
+          headers: stHeaders(token),
+          params: {
+            createdOnOrAfter,
+            pageSize,
+            page,
+          },
+        }
+      );
+
+      const jobs = res.data?.data || [];
+      allJobs.push(...jobs);
+
+      if (jobs.length < pageSize) break;
+      page++;
+
+      if (allJobs.length >= 500) {
+        console.warn('[ST API] Hit 500 job limit during bookings poll — increase frequency or lookback window');
+        break;
+      }
+    }
+
+    return allJobs;
+
+  } catch (err) {
+    console.error('[ST API] getRecentJobs failed:', err.response?.data || err.message);
+    throw err;
+  }
+}
+
 // ── Get custom fields for a single job ────────────────────────
 /**
  * The JPM v2 jobs list endpoint does not reliably return
@@ -365,6 +417,7 @@ function simulateDemoContacts(customerId) {
 module.exports = {
   getAccessToken,
   getCompletedJobs,
+  getRecentJobs,
   getJobCustomFields,
   getCustomer,
   getCustomerContacts,

@@ -31,7 +31,32 @@ CORS is enabled for `https://scheduler-mu-three.vercel.app`.
 | `scheduler_opened`         | The scheduler UI becomes visible to the friend | First event. Cheapest to wire up. |
 | `slot_selected`            | The friend picks a time slot | `metadata.slot_ts` is useful but not required. |
 | `customer_info_submitted`  | The friend submits the name/phone/address step | Don't include PII in `metadata`. |
-| `booking_confirmed`        | A booking call to ST succeeds | Include `metadata.st_job_id` if available so we can join to ST jobs later. |
+| `booking_confirmed`        | A booking call to ST succeeds | See "booking_confirmed metadata" below — include as much as the scheduler has. |
+
+## `booking_confirmed` metadata (recommended fields)
+
+When the booking succeeds, the more the scheduler hands us, the richer the
+dashboard row is *immediately* — without waiting on the bookings poller to
+fill in the gaps from ST.
+
+```json
+{
+  "type":       "booking_confirmed",
+  "code":       "U9YBE5",
+  "session_id": "f1cb2e88-…-de4",
+  "metadata": {
+    "st_job_id":       422445885,
+    "st_customer_id":  61246694,
+    "referred_name":   "Pat Friend",
+    "referred_phone":  "9725550199"
+  }
+}
+```
+
+- `st_job_id` / `st_customer_id` — the ServiceTitan IDs from the booking response.
+- `referred_name` / `referred_phone` — the friend's info from the form. Phone is normalized server-side (digits-only, leading `1` stripped). These let the admin dashboard show the friend's name right away.
+
+All four are optional. The handler patches in whichever are present.
 
 Three of these (everything except `customer_info_submitted`) is already enough to read drop-off. Add `customer_info_submitted` if it's cheap.
 
@@ -84,7 +109,12 @@ function beaconFunnel(type, extras = {}) {
 beaconFunnel('scheduler_opened');
 beaconFunnel('slot_selected', { slot_ts: chosenSlot.toISOString() });
 beaconFunnel('customer_info_submitted');
-beaconFunnel('booking_confirmed', { st_job_id: booking.jobId });
+beaconFunnel('booking_confirmed', {
+  st_job_id:       booking.jobId,
+  st_customer_id:  booking.customerId,
+  referred_name:   form.name,
+  referred_phone:  form.phone,
+});
 ```
 
 The endpoint always returns `200 { success: true }` (even on validation failure for unknown event types — those return `400`). Beacons are fire-and-forget; the scheduler should never block on them.

@@ -29,10 +29,6 @@ router.post('/servicetitan', async (req, res) => {
   if (eventType.includes('job') && eventType.includes('complet')) {
     await handleJobCompleted(payload);
   }
-
-  if (eventType.includes('booking') || eventType.includes('appointment')) {
-    await handleNewBooking(payload);
-  }
 });
 
 // ──────────────────────────────────────────────────────────────
@@ -133,64 +129,6 @@ async function handleJobCompleted(payload) {
 
   } catch (err) {
     console.error('[handleJobCompleted] Error:', err.message);
-  }
-}
-
-// ──────────────────────────────────────────────────────────────
-// HANDLER: New Booking
-// ──────────────────────────────────────────────────────────────
-async function handleNewBooking(payload) {
-  try {
-    const referralSlug = payload.referralSlug || payload.customFields?.referralSlug || null;
-    if (!referralSlug) return;
-
-    const stCustomerId = String(payload.customerId || payload.customer?.id || '');
-    const customerName = payload.customerName || payload.customer?.name || '';
-    const customerPhone = normalizePhone(payload.customerPhone || payload.customer?.phone || '');
-
-    // Find the referrer by slug or referral_code
-    const normalizedCode = normalizeCode(referralSlug);
-    const { data: customer } = await supabase
-      .from('customers')
-      .select('id')
-      .or(`referral_slug.eq.${referralSlug},referral_code.eq.${normalizedCode}`)
-      .single();
-
-    if (!customer) {
-      console.warn(`[Booking] No customer found for slug/code: ${referralSlug}`);
-      return;
-    }
-
-    // Check if referral record already exists
-    const { data: referral } = await supabase
-      .from('referrals')
-      .select('id')
-      .eq('referrer_id', customer.id)
-      .eq('referred_phone', customerPhone)
-      .single();
-
-    if (referral) {
-      await supabase
-        .from('referrals')
-        .update({
-          status: 'booked',
-          referred_st_id: stCustomerId,
-          referred_name: customerName,
-        })
-        .eq('id', referral.id);
-    } else {
-      await supabase.from('referrals').insert({
-        referrer_id: customer.id,
-        referred_name: customerName,
-        referred_phone: customerPhone,
-        referred_st_id: stCustomerId,
-        status: 'booked',
-      });
-    }
-
-    console.log(`[Booking] Referral linked — slug: ${referralSlug}, new customer: ${customerName}`);
-  } catch (err) {
-    console.error('[handleNewBooking] Error:', err.message);
   }
 }
 
