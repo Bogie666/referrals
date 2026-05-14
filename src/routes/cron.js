@@ -256,11 +256,26 @@ async function processJob(job, token, payoutSettings, results) {
   // Convert ALL CAPS name to Title Case
   const name = toTitleCase(customer.name || 'Valued Customer');
 
-  // ── Generate referral code ───────────────────────────────
-  const referralCode = await generateUniqueReferralCode(supabase);
-  const referralLink = REFERRAL_BASE_URL + '?r=' + referralCode;
+  // ── Resolve referral code ────────────────────────────────
+  // If this customer was pre-enrolled in Supabase (manual or
+  // bulk import), reuse their existing code so any Chiirp link
+  // they already received stays valid. Only generate fresh if
+  // there's truly no code anywhere.
+  const { data: preExisting } = await supabase
+    .from('customers')
+    .select('id, referral_code')
+    .eq('st_customer_id', String(customerId))
+    .maybeSingle();
 
-  console.log(`[Poller] Generated code for ${name}: ${referralCode}`);
+  let referralCode;
+  if (preExisting?.referral_code) {
+    referralCode = preExisting.referral_code;
+    console.log(`[Poller] Reusing existing Supabase code for ${name}: ${referralCode}`);
+  } else {
+    referralCode = await generateUniqueReferralCode(supabase);
+    console.log(`[Poller] Generated code for ${name}: ${referralCode}`);
+  }
+  const referralLink = REFERRAL_BASE_URL + '?r=' + referralCode;
 
   // ── Write back to ServiceTitan ───────────────────────────
   if (!DEMO_MODE) {
@@ -507,21 +522,22 @@ async function upsertCustomerInSupabase(stCustomer, referralCode, extras = {}) {
   // Check if exists
   const { data: existing } = await supabase
     .from('customers')
-    .select('id, invite_sent_at')
+    .select('id, invite_sent_at, referral_code, referral_link')
     .eq('st_customer_id', id)
     .single();
 
   if (existing) {
-    // Update referral code if not set
-    await supabase
-      .from('customers')
-      .update({
-        referral_link: referralLink || existing.referral_link,
-        referral_code: referralCode,
-        ...(phone && { phone }),
-        ...(email && { email }),
-      })
-      .eq('id', existing.id);
+    // Preserve the pre-existing referral_code/link so a bulk-imported
+    // or manually-enrolled customer doesn't have their code clobbered
+    // when the poller next sees one of their jobs.
+    const patch = {};
+    if (!existing.referral_code && referralCode)  patch.referral_code = referralCode;
+    if (!existing.referral_link && referralLink)  patch.referral_link = referralLink;
+    if (phone) patch.phone = phone;
+    if (email) patch.email = email;
+    if (Object.keys(patch).length) {
+      await supabase.from('customers').update(patch).eq('id', existing.id);
+    }
     return existing;
   }
 
