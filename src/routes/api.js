@@ -213,6 +213,38 @@ router.post('/funnel/event', async (req, res) => {
     requestContext: extractRequestContext(req),
   });
 
+  // Promote the friend's pending referral to `booked` as soon as the
+  // scheduler confirms a booking — don't wait for the next poller run
+  // (which only sees the friend's job once it's *completed* in ST).
+  if (type === 'booking_confirmed' && referrerId) {
+    const stJobId = metadata?.st_job_id ? String(metadata.st_job_id) : null;
+
+    const { data: existing } = await supabase
+      .from('referrals')
+      .select('id, status')
+      .eq('referrer_id', referrerId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('referrals')
+        .update({
+          status: 'booked',
+          ...(stJobId && { referred_job_id: stJobId }),
+        })
+        .eq('id', existing.id);
+    } else {
+      await supabase.from('referrals').insert({
+        referrer_id: referrerId,
+        status: 'booked',
+        ...(stJobId && { referred_job_id: stJobId }),
+      });
+    }
+  }
+
   res.json({ success: true });
 });
 
