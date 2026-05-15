@@ -62,8 +62,12 @@ async function buildStats(counts, total, totalRewardsPaid) {
     .select('id', { count: 'exact', head: true })
     .gte('sent_at', startOfMonth.toISOString());
 
+  const activeReferrals = counts.booked + counts.completed + counts.rewarded;
+
   return {
     total,
+    activeReferrals,
+    pendingReferrals: counts.pending,
     statusCounts: counts,
     totalRewardsPaid,
     totalCustomers: totalCustomers || 0,
@@ -321,20 +325,27 @@ async function getSystemStatus() {
 
   const { data: recentEvents } = await supabase
     .from('tracking_events')
-    .select('event_type, created_at')
+    .select('event_type, referral_code, referrer_id, created_at')
     .gte('created_at', since24h);
 
-  const counts = {
+  const emptyBuckets = () => ({
     portal_view: 0, share: 0, link_click: 0,
     scheduler_opened: 0, slot_selected: 0,
     customer_info_submitted: 0, booking_confirmed: 0,
-  };
+  });
+  const countsAll      = emptyBuckets();
+  const countsReferral = emptyBuckets();
+
   (recentEvents || []).forEach(e => {
-    if (counts[e.event_type] !== undefined) counts[e.event_type]++;
+    if (countsAll[e.event_type] !== undefined) countsAll[e.event_type]++;
+    if ((e.referral_code || e.referrer_id) && countsReferral[e.event_type] !== undefined) {
+      countsReferral[e.event_type]++;
+    }
   });
 
-  const trackingTotal = Object.values(counts).reduce((a, b) => a + b, 0);
-  const trackingStatus = trackingTotal > 0 ? 'green' : 'unknown';
+  const trackingTotalAll      = Object.values(countsAll).reduce((a, b) => a + b, 0);
+  const trackingTotalReferral = Object.values(countsReferral).reduce((a, b) => a + b, 0);
+  const trackingStatus = trackingTotalAll > 0 ? 'green' : 'unknown';
 
   return {
     poller: {
@@ -356,8 +367,11 @@ async function getSystemStatus() {
     },
     tracking: {
       status: trackingStatus,
-      total24h: trackingTotal,
-      counts,
+      total24h: trackingTotalAll,
+      referralTotal24h: trackingTotalReferral,
+      counts: countsAll,         // back-compat: pill expansion shows totals
+      countsAll,
+      countsReferral,
     },
   };
 }
