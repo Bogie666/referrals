@@ -53,12 +53,15 @@ async function buildStats(counts, total, totalRewardsPaid) {
     ? Math.round((counts.rewarded / qualified) * 100)
     : 0;
 
-  // Revenue from completed referred jobs — sum of the friend's
-  // invoice totals on referrals that reached completed or rewarded.
+  // Total revenue from referred customers — sum of the friend's
+  // invoice totals across every status where a job has been seen
+  // by the poller, regardless of whether it cleared min_job_value.
+  // Includes 'rejected' (admin manually rejected after the job
+  // landed) so revenue is reported honestly.
   const { data: jobValueData } = await supabase
     .from('referrals')
     .select('referred_job_value')
-    .in('status', ['completed', 'rewarded']);
+    .in('status', ['completed', 'rewarded', 'rejected']);
 
   const referralRevenue = (jobValueData || []).reduce(
     (s, r) => s + parseFloat(r.referred_job_value || 0), 0

@@ -1242,7 +1242,7 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, timeli
       <div class="stat-card green">
         <div class="stat-label">Referral Revenue</div>
         <div class="stat-value">${formatCurrency(stats.referralRevenue)}</div>
-        <div class="stat-sub">${stats.referralRevenueJobs} completed job${stats.referralRevenueJobs === 1 ? '' : 's'}</div>
+        <div class="stat-sub">Across ${stats.referralRevenueJobs} referred job${stats.referralRevenueJobs === 1 ? '' : 's'}</div>
       </div>
       <div class="stat-card orange">
         <div class="stat-label">Conversion Rate</div>
