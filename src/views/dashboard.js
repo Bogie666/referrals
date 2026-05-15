@@ -1239,6 +1239,11 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, timeli
         <div class="stat-value">${formatCurrency(stats.totalRewardsPaid)}</div>
         <div class="stat-sub">${stats.statusCounts.rewarded} payouts</div>
       </div>
+      <div class="stat-card green">
+        <div class="stat-label">Referral Revenue</div>
+        <div class="stat-value">${formatCurrency(stats.referralRevenue)}</div>
+        <div class="stat-sub">Across ${stats.referralRevenueJobs} referred job${stats.referralRevenueJobs === 1 ? '' : 's'}</div>
+      </div>
       <div class="stat-card orange">
         <div class="stat-label">Conversion Rate</div>
         <div class="stat-value">${stats.conversionRate}%</div>
@@ -1592,6 +1597,7 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
             <th>Link</th>
             <th>Referrals</th>
             <th>Earned</th>
+            <th>Payouts</th>
             <th>Enrolled</th>
           </tr></thead>
           <tbody id="customers-tbody">
@@ -1599,9 +1605,9 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
               const haystack = [c.name, c.phone, c.email, c.referral_code, c.st_customer_id]
                 .filter(Boolean).join(' ').toLowerCase().replace(/"/g, '&quot;');
               return `
-              <tr data-search="${haystack}">
+              <tr data-search="${haystack}" id="customer-row-${c.id}">
                 <td>
-                  <div class="td-name">${c.name}</div>
+                  <div class="td-name">${c.name}${c.payout_eligible === false ? ` <span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#fee2e2;color:#991b1b;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;">INELIGIBLE</span>` : ''}</div>
                   ${c.st_customer_id ? `<div class="td-sub">ST: ${c.st_customer_id}</div>` : ''}
                 </td>
                 <td style="white-space:nowrap;">${formatPhone(c.phone)}</td>
@@ -1628,11 +1634,22 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
                 </td>
                 <td style="text-align:center;">${c.total_referrals || 0}</td>
                 <td style="font-weight:600;color:${c.total_rewards > 0 ? 'var(--green)' : 'var(--muted)'};">${formatCurrency(c.total_rewards || 0)}</td>
+                <td style="white-space:nowrap;" id="eligibility-cell-${c.id}">
+                  ${canWrite
+                    ? `<button type="button"
+                              onclick="toggleEligibility('${c.id}', ${c.payout_eligible !== false}, this)"
+                              style="background:${c.payout_eligible === false ? '#10b981' : 'transparent'};
+                                     color:${c.payout_eligible === false ? '#fff' : 'var(--text)'};
+                                     border:1px solid ${c.payout_eligible === false ? '#10b981' : 'var(--border)'};
+                                     border-radius:6px; padding:4px 10px; cursor:pointer; font-size:12px; font-weight:600;"
+                              title="${c.payout_eligible === false ? 'Re-enable payouts' : 'Mark as not eligible for payouts'}">${c.payout_eligible === false ? 'Make eligible' : 'Eligible'}</button>`
+                    : `<span style="color:${c.payout_eligible === false ? '#991b1b' : 'var(--green)'}; font-weight:600;">${c.payout_eligible === false ? 'Ineligible' : 'Eligible'}</span>`}
+                </td>
                 <td style="color:var(--muted);white-space:nowrap;">${formatDate(c.created_at)}</td>
               </tr>
             `;
             }).join('') || `
-              <tr><td colspan="8">
+              <tr><td colspan="9">
                 <div class="empty-state"><p>No customers yet — they'll appear here as soon as the poller enrolls them.</p></div>
               </td></tr>
             `}
@@ -1674,6 +1691,32 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
             setTimeout(function() { btn.textContent = original; }, 1200);
           });
         }
+      }
+
+      function toggleEligibility(customerId, currentlyEligible, btn) {
+        var newEligible = !currentlyEligible;
+        var verb = newEligible ? 'allow payouts to' : 'mark as INELIGIBLE for payouts';
+        if (!confirm('Are you sure you want to ' + verb + ' this customer?\\n\\nTheir referrals will keep tracking — but ' + (newEligible ? 'completed referred jobs will land in the payout queue.' : 'completed referred jobs will skip the payout queue and be marked rejected.'))) return;
+        var original = btn.textContent;
+        btn.disabled = true; btn.textContent = '…';
+        fetch('/admin/api/customers/' + customerId + '/eligibility', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eligible: newEligible }),
+        })
+          .then(function(r) { return r.json().then(function(b) { return { ok: r.ok, body: b }; }); })
+          .then(function(res) {
+            if (res.ok && res.body.success) {
+              location.reload();
+            } else {
+              alert('Failed: ' + (res.body.error || 'Unknown error'));
+              btn.textContent = original; btn.disabled = false;
+            }
+          })
+          .catch(function(err) {
+            alert('Network error: ' + err.message);
+            btn.textContent = original; btn.disabled = false;
+          });
       }
 
       function resendInvite(customerId, btn) {

@@ -53,6 +53,21 @@ async function buildStats(counts, total, totalRewardsPaid) {
     ? Math.round((counts.rewarded / qualified) * 100)
     : 0;
 
+  // Total revenue from referred customers — sum of the friend's
+  // invoice totals across every status where a job has been seen
+  // by the poller, regardless of whether it cleared min_job_value.
+  // Includes 'rejected' (admin manually rejected after the job
+  // landed) so revenue is reported honestly.
+  const { data: jobValueData } = await supabase
+    .from('referrals')
+    .select('referred_job_value')
+    .in('status', ['completed', 'rewarded', 'rejected']);
+
+  const referralRevenue = (jobValueData || []).reduce(
+    (s, r) => s + parseFloat(r.referred_job_value || 0), 0
+  );
+  const referralRevenueJobs = (jobValueData || []).filter(r => parseFloat(r.referred_job_value || 0) > 0).length;
+
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -70,6 +85,8 @@ async function buildStats(counts, total, totalRewardsPaid) {
     pendingReferrals: counts.pending,
     statusCounts: counts,
     totalRewardsPaid,
+    referralRevenue,
+    referralRevenueJobs,
     totalCustomers: totalCustomers || 0,
     conversionRate,
     textsSentMonth: textsSentMonth || 0,
@@ -136,7 +153,7 @@ async function getTopReferrers(limit = 10) {
 async function getAllCustomers(limit = 500) {
   const { data, error } = await supabase
     .from('customers')
-    .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, created_at')
+    .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, payout_eligible, created_at')
     .order('created_at', { ascending: false })
     .limit(limit);
 

@@ -374,6 +374,33 @@ router.post('/api/customers', requireWriteAccess, async (req, res) => {
 // Useful when the original SMS/email got lost, or to manually
 // onboard someone who was enrolled while DEMO_MODE was on.
 // ──────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// POST /admin/api/customers/:id/eligibility
+// Flip a customer's payout_eligible flag. Ineligible customers
+// can still refer (we track their referrals) but completed referred
+// jobs route to status=rejected instead of completed so they never
+// land in the payout queue.
+// ──────────────────────────────────────────────────────────────
+router.post('/api/customers/:id/eligibility', requireWriteAccess, async (req, res) => {
+  const { id } = req.params;
+  const eligible = req.body?.eligible === true;
+
+  const { data, error } = await supabase
+    .from('customers')
+    .update({ payout_eligible: eligible })
+    .eq('id', id)
+    .select('id, name, payout_eligible')
+    .single();
+
+  if (error) {
+    console.error('[Admin] eligibility update failed:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+  if (!data) return res.status(404).json({ error: 'Customer not found' });
+
+  res.json({ success: true, customer: data });
+});
+
 router.post('/api/customers/:id/send-invite', requireWriteAccess, async (req, res) => {
   const { id } = req.params;
 
