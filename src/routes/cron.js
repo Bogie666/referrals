@@ -861,38 +861,59 @@ router.get('/poll-bookings', verifyCronAuth, async (req, res) => {
           console.warn(`[Bookings] Couldn't fetch friend info for job ${jobId}: ${err.message}`);
         }
 
-        // Promote existing pending row if present, else insert booked
-        const { data: existing } = await supabase
+        // Look up an existing row by job id first — the funnel beacon may
+        // have already promoted a pending → booked without the friend's
+        // name. Backfill missing fields rather than create a duplicate.
+        const { data: byJob } = await supabase
           .from('referrals')
-          .select('id, status')
-          .eq('referrer_id', referrer.id)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false })
-          .limit(1)
+          .select('id, status, referred_name, referred_phone, referred_st_id')
+          .eq('referred_job_id', String(jobId))
           .maybeSingle();
 
-        if (existing) {
-          await supabase
+        if (byJob) {
+          const patch = {};
+          if (!byJob.referred_name  && friendName)        patch.referred_name  = friendName;
+          if (!byJob.referred_phone && friendPhone)       patch.referred_phone = friendPhone;
+          if (!byJob.referred_st_id && job.customerId)    patch.referred_st_id = String(job.customerId);
+          if (Object.keys(patch).length) {
+            await supabase.from('referrals').update(patch).eq('id', byJob.id);
+            results.referralsUpdated++;
+          }
+        } else {
+          // No existing row for this job — promote the referrer's most recent
+          // pending row, or insert fresh.
+          const { data: pending } = await supabase
             .from('referrals')
-            .update({
+            .select('id, status')
+            .eq('referrer_id', referrer.id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (pending) {
+            await supabase
+              .from('referrals')
+              .update({
+                status:          'booked',
+                referred_job_id: String(jobId),
+                referred_st_id:  job.customerId ? String(job.customerId) : null,
+                ...(friendName  && { referred_name:  friendName }),
+                ...(friendPhone && { referred_phone: friendPhone }),
+              })
+              .eq('id', pending.id);
+            results.referralsUpdated++;
+          } else {
+            await supabase.from('referrals').insert({
+              referrer_id:     referrer.id,
               status:          'booked',
               referred_job_id: String(jobId),
               referred_st_id:  job.customerId ? String(job.customerId) : null,
-              ...(friendName  && { referred_name:  friendName }),
-              ...(friendPhone && { referred_phone: friendPhone }),
-            })
-            .eq('id', existing.id);
-          results.referralsUpdated++;
-        } else {
-          await supabase.from('referrals').insert({
-            referrer_id:     referrer.id,
-            status:          'booked',
-            referred_job_id: String(jobId),
-            referred_st_id:  job.customerId ? String(job.customerId) : null,
-            referred_name:   friendName  || null,
-            referred_phone: friendPhone || null,
-          });
-          results.referralsCreated++;
+              referred_name:   friendName  || null,
+              referred_phone: friendPhone || null,
+            });
+            results.referralsCreated++;
+          }
         }
 
         await supabase.from('job_events').insert({
