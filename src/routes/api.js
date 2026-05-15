@@ -98,7 +98,7 @@ router.post('/referral/click', async (req, res) => {
 
   await recordEvent({
     eventType:      'link_click',
-    code:           slug,
+    code:           customer.referral_code,
     referrerId:     customer.id,
     channel:        channel || null,
     sessionId,
@@ -144,7 +144,7 @@ router.post('/share/event', async (req, res) => {
 
   await recordEvent({
     eventType:      'share',
-    code,
+    code:           customer.referral_code,
     referrerId:     customer.id,
     channel,
     sessionId,
@@ -168,7 +168,7 @@ router.post('/portal/view', async (req, res) => {
 
   await recordEvent({
     eventType:      'portal_view',
-    code,
+    code:           customer.referral_code,
     referrerId:     customer.id,
     sessionId:      req.cookies?.[SESSION_COOKIE] || null,
     requestContext: extractRequestContext(req),
@@ -199,14 +199,16 @@ router.post('/funnel/event', async (req, res) => {
   }
 
   let referrerId = null;
+  let canonicalCode = null;
   if (code) {
     const customer = await resolveReferrerByCode(code);
-    referrerId = customer?.id || null;
+    referrerId    = customer?.id           || null;
+    canonicalCode = customer?.referral_code || null;
   }
 
   await recordEvent({
     eventType:      type,
-    code:           code || null,
+    code:           canonicalCode,
     referrerId,
     sessionId:      sessionId || req.cookies?.[SESSION_COOKIE] || null,
     metadata:       metadata || null,

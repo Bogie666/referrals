@@ -626,17 +626,20 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
     .activity-dot.portal    { background: #e2e8f0; color: #475569; }
     .activity-dot.share     { background: #fef3c7; color: #b45309; }
     .activity-dot.funnel    { background: #ede9fe; color: #7c3aed; }
+    .activity-dot.anonymous { background: #f1f5f9; color: #94a3b8; }
+    .activity-item[data-category="anonymous"] .activity-text p { color: var(--muted); font-style: italic; }
     .activity-text { flex: 1; }
     .activity-text p { font-size: 13px; color: var(--text); line-height: 1.4; }
     .activity-text span { font-size: 12px; color: var(--muted); margin-top: 2px; display: block; }
     .activity-meta { font-size: 11px; color: var(--muted); margin-left: 6px; }
 
     /* -- Activity feed filtering -- */
-    [data-activity-filter="referral"] .activity-item:not([data-category="referral"]) { display: none; }
-    [data-activity-filter="click"]    .activity-item:not([data-category="click"])    { display: none; }
-    [data-activity-filter="portal"]   .activity-item:not([data-category="portal"])   { display: none; }
-    [data-activity-filter="share"]    .activity-item:not([data-category="share"])    { display: none; }
-    [data-activity-filter="funnel"]   .activity-item:not([data-category="funnel"])   { display: none; }
+    [data-activity-filter="referral"]  .activity-item:not([data-category="referral"])  { display: none; }
+    [data-activity-filter="click"]     .activity-item:not([data-category="click"])     { display: none; }
+    [data-activity-filter="portal"]    .activity-item:not([data-category="portal"])    { display: none; }
+    [data-activity-filter="share"]     .activity-item:not([data-category="share"])     { display: none; }
+    [data-activity-filter="funnel"]    .activity-item:not([data-category="funnel"])    { display: none; }
+    [data-activity-filter="anonymous"] .activity-item:not([data-category="anonymous"]) { display: none; }
 
     /* -- Chart container -- */
     .chart-wrap {
@@ -669,6 +672,20 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
       color: #fff;
       border-color: var(--navy);
     }
+
+    .funnel-mode-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .funnel-mode-btn:hover { background: var(--row-hover); color: var(--text); }
+    .funnel-mode-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
 
     /* -- Empty state -- */
     .empty-state {
@@ -1066,6 +1083,16 @@ async function submitPayout() {
   }
 }
 
+// -- Funnel mode toggle (Overview "Funnel — last 24h" card) --
+function setFunnelMode(mode) {
+  document.querySelectorAll('[data-funnel-mode]').forEach(function(el) {
+    el.style.display = el.getAttribute('data-funnel-mode') === mode ? '' : 'none';
+  });
+  document.querySelectorAll('[data-funnel-mode-btn]').forEach(function(b) {
+    b.classList.toggle('active', b.getAttribute('data-funnel-mode-btn') === mode);
+  });
+}
+
 // -- System status panel toggle --
 function toggleStatusPanel(id) {
   const target = document.getElementById(id);
@@ -1111,39 +1138,55 @@ applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
 </html>`;
 }
 
-function renderFunnelSnapshot(systemStatus, stats) {
-  const c = systemStatus?.tracking?.counts || {};
+function renderFunnelSnapshot(systemStatus) {
+  const t = systemStatus?.tracking || {};
+  const referralCounts = t.countsReferral || t.counts || {};
+  const allCounts      = t.countsAll      || t.counts || {};
   const rows = [
     { label: 'Portal views',         key: 'portal_view',              dot: 'portal' },
-    { label: 'Shares',               key: 'share',                    dot: 'share'  },
+    { label: 'Share clicks',         key: 'share',                    dot: 'share'  },
     { label: 'Link clicks',          key: 'link_click',               dot: 'click'  },
     { label: 'Scheduler opened',     key: 'scheduler_opened',         dot: 'funnel' },
     { label: 'Slot selected',        key: 'slot_selected',            dot: 'funnel' },
     { label: 'Info submitted',       key: 'customer_info_submitted',  dot: 'funnel' },
     { label: 'Booking confirmed',    key: 'booking_confirmed',        dot: 'funnel' },
   ];
-  const total = rows.reduce((sum, r) => sum + (c[r.key] || 0), 0);
+  const sum = (c) => rows.reduce((acc, r) => acc + (c[r.key] || 0), 0);
+  const totalReferral = sum(referralCounts);
+  const totalAll      = sum(allCounts);
+
+  const renderRow = (r, c) => {
+    const n = c[r.key] || 0;
+    return `
+      <div style="display:flex; align-items:center; justify-content:space-between;
+                  padding:10px 14px; border-bottom:1px solid var(--border);">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="activity-dot ${r.dot}" style="width:10px; height:10px; padding:0; font-size:0;"></span>
+          <span style="font-size:13px;">${r.label}</span>
+        </div>
+        <span style="font-weight:700; font-size:15px; color:${n > 0 ? 'var(--text)' : 'var(--muted)'};">${n}</span>
+      </div>
+    `;
+  };
 
   return `
     <div class="card">
       <div class="card-header">
         <h3>Funnel — last 24h</h3>
-        <span style="font-size:12px; color:var(--muted);">${total} event${total === 1 ? '' : 's'}</span>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="funnel-mode-btn active" data-funnel-mode-btn="referrals"
+                  onclick="setFunnelMode('referrals')"
+                  title="Events tied to a referral code">Referrals · ${totalReferral}</button>
+          <button type="button" class="funnel-mode-btn" data-funnel-mode-btn="all"
+                  onclick="setFunnelMode('all')"
+                  title="All scheduler / portal activity, including anonymous">All · ${totalAll}</button>
+        </div>
       </div>
-      <div style="padding: 6px 4px 14px;">
-        ${rows.map(r => {
-          const n = c[r.key] || 0;
-          return `
-            <div style="display:flex; align-items:center; justify-content:space-between;
-                        padding:10px 14px; border-bottom:1px solid var(--border);">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <span class="activity-dot ${r.dot}" style="width:10px; height:10px; padding:0; font-size:0;"></span>
-                <span style="font-size:13px;">${r.label}</span>
-              </div>
-              <span style="font-weight:700; font-size:15px; color:${n > 0 ? 'var(--text)' : 'var(--muted)'};">${n}</span>
-            </div>
-          `;
-        }).join('')}
+      <div data-funnel-mode="referrals" style="padding: 6px 4px 14px;">
+        ${rows.map(r => renderRow(r, referralCounts)).join('')}
+      </div>
+      <div data-funnel-mode="all" style="padding: 6px 4px 14px; display:none;">
+        ${rows.map(r => renderRow(r, allCounts)).join('')}
       </div>
     </div>
   `;
@@ -1187,9 +1230,9 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, timeli
     <!-- KPI cards -->
     <div class="stats-grid">
       <div class="stat-card navy">
-        <div class="stat-label">Total Referrals</div>
-        <div class="stat-value">${stats.total}</div>
-        <div class="stat-sub">All time</div>
+        <div class="stat-label">Active Referrals</div>
+        <div class="stat-value">${stats.activeReferrals}</div>
+        <div class="stat-sub">${stats.pendingReferrals} pending link click${stats.pendingReferrals === 1 ? '' : 's'}</div>
       </div>
       <div class="stat-card green">
         <div class="stat-label">Rewards Paid</div>
@@ -1259,8 +1302,12 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, timeli
           <a href="/admin/activity">View all</a>
         </div>
         <div class="activity-list">
-          ${(timeline || []).slice(0, 8).map(renderTimelineItem).join('')
-            || '<div class="empty-state"><p>No activity yet</p></div>'}
+          ${(() => {
+            const filtered = (timeline || []).filter(item => !isAnonymousItem(item)).slice(0, 8);
+            return filtered.length
+              ? filtered.map(renderTimelineItem).join('')
+              : '<div class="empty-state"><p>No referral activity yet</p></div>';
+          })()}
         </div>
       </div>
 
@@ -1741,7 +1788,12 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
   `;
 }
 
+function isAnonymousItem(item) {
+  return item.kind === 'tracking' && !item.referralCode && !item.referrerName;
+}
+
 function classifyTimelineItem(item) {
+  if (isAnonymousItem(item)) return 'anonymous';
   if (item.kind === 'referral') {
     if (item.subtype === 'pending') return 'click';
     return 'referral';
@@ -1770,6 +1822,17 @@ function renderTimelineItem(item) {
     else if (s === 'pending')   line = `${who}'s referral link clicked — awaiting booking`;
     else                        line = `${who} — ${s}`;
     badge = statusBadge(s);
+  } else if (isAnonymousItem(item)) {
+    switch (item.subtype) {
+      case 'scheduler_opened':        line = 'Anonymous visitor opened the scheduler';        break;
+      case 'slot_selected':           line = 'Anonymous visitor picked a time slot';         break;
+      case 'customer_info_submitted': line = 'Anonymous visitor submitted booking info';     break;
+      case 'booking_confirmed':       line = 'Anonymous visitor confirmed a booking';        break;
+      case 'link_click':              line = 'Anonymous link click';                          break;
+      case 'portal_view':             line = 'Anonymous portal view';                         break;
+      case 'share':                   line = `Anonymous share via <strong>${escapeHtmlText(item.channel || 'unknown')}</strong>`; break;
+      default:                        line = `Anonymous · ${item.subtype}`;
+    }
   } else {
     switch (item.subtype) {
       case 'link_click':
@@ -1820,12 +1883,13 @@ function escapeHtmlText(s) {
 
 function renderActivityTab(timeline) {
   const filters = [
-    { id: 'all',      label: 'All' },
-    { id: 'referral', label: 'Referrals' },
-    { id: 'click',    label: 'Clicks' },
-    { id: 'portal',   label: 'Portal views' },
-    { id: 'share',    label: 'Shares' },
-    { id: 'funnel',   label: 'Scheduler' },
+    { id: 'all',       label: 'All' },
+    { id: 'referral',  label: 'Referrals' },
+    { id: 'click',     label: 'Clicks' },
+    { id: 'portal',    label: 'Portal views' },
+    { id: 'share',     label: 'Shares' },
+    { id: 'funnel',    label: 'Scheduler' },
+    { id: 'anonymous', label: 'Anonymous' },
   ];
 
   return `
