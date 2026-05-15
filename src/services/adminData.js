@@ -150,7 +150,7 @@ async function getTopReferrers(limit = 10) {
  * staff can look anyone up — including customers who've been enrolled
  * but haven't yet had a referral come back.
  */
-async function getAllCustomers(limit = 500) {
+async function getAllCustomers(limit = 10000) {
   const { data, error } = await supabase
     .from('customers')
     .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, payout_eligible, created_at')
