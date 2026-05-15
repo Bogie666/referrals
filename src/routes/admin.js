@@ -116,7 +116,7 @@ router.get('/referrers', requireAdmin, async (req, res) => {
   try {
     const [data, allCustomers] = await Promise.all([
       loadDashboardData(),
-      getAllCustomers(500),
+      getAllCustomers(),
     ]);
     res.send(renderDashboard({ ...data, allCustomers, currentUser: req.adminUser, activeTab: 'customers' }));
   } catch (err) {
