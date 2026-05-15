@@ -53,6 +53,18 @@ async function buildStats(counts, total, totalRewardsPaid) {
     ? Math.round((counts.rewarded / qualified) * 100)
     : 0;
 
+  // Revenue from completed referred jobs — sum of the friend's
+  // invoice totals on referrals that reached completed or rewarded.
+  const { data: jobValueData } = await supabase
+    .from('referrals')
+    .select('referred_job_value')
+    .in('status', ['completed', 'rewarded']);
+
+  const referralRevenue = (jobValueData || []).reduce(
+    (s, r) => s + parseFloat(r.referred_job_value || 0), 0
+  );
+  const referralRevenueJobs = (jobValueData || []).filter(r => parseFloat(r.referred_job_value || 0) > 0).length;
+
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -70,6 +82,8 @@ async function buildStats(counts, total, totalRewardsPaid) {
     pendingReferrals: counts.pending,
     statusCounts: counts,
     totalRewardsPaid,
+    referralRevenue,
+    referralRevenueJobs,
     totalCustomers: totalCustomers || 0,
     conversionRate,
     textsSentMonth: textsSentMonth || 0,

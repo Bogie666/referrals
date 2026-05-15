@@ -1239,6 +1239,11 @@ function renderOverview({ stats, referrals, topReferrers, recentActivity, timeli
         <div class="stat-value">${formatCurrency(stats.totalRewardsPaid)}</div>
         <div class="stat-sub">${stats.statusCounts.rewarded} payouts</div>
       </div>
+      <div class="stat-card green">
+        <div class="stat-label">Referral Revenue</div>
+        <div class="stat-value">${formatCurrency(stats.referralRevenue)}</div>
+        <div class="stat-sub">${stats.referralRevenueJobs} completed job${stats.referralRevenueJobs === 1 ? '' : 's'}</div>
+      </div>
       <div class="stat-card orange">
         <div class="stat-label">Conversion Rate</div>
         <div class="stat-value">${stats.conversionRate}%</div>
