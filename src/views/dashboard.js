@@ -1658,31 +1658,109 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
         <div id="customers-empty" style="display:none; padding:40px 20px; text-align:center; color:var(--muted);">
           No customers match your search.
         </div>
+        <div id="customers-pagination" style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-top:1px solid var(--border); gap:12px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);">
+            <span>Show</span>
+            <select id="customers-page-size" onchange="customersChangePageSize(this.value)"
+                    style="padding:4px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:var(--input-bg); color:var(--text);">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+            </select>
+            <span id="customers-page-info">—</span>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button type="button" id="customers-first" onclick="customersGoTo(1)"
+                    style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--text); cursor:pointer; font-size:12px;">«</button>
+            <button type="button" id="customers-prev" onclick="customersChangePage(-1)"
+                    style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--text); cursor:pointer; font-size:13px;">Prev</button>
+            <span id="customers-page-of" style="display:inline-flex; align-items:center; padding:0 10px; font-size:13px; color:var(--muted);">Page 1</span>
+            <button type="button" id="customers-next" onclick="customersChangePage(1)"
+                    style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--text); cursor:pointer; font-size:13px;">Next</button>
+            <button type="button" id="customers-last" onclick="customersGoTo(-1)"
+                    style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--text); cursor:pointer; font-size:12px;">»</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <script>
-      function filterCustomers(query) {
-        var q = (query || '').trim().toLowerCase();
-        var rows = document.querySelectorAll('#customers-tbody tr');
-        var visible = 0;
-        rows.forEach(function(row) {
+      var __customersPageSize = 50;
+      var __customersPage = 1;
+
+      function __customersAllRows() {
+        return Array.prototype.slice.call(document.querySelectorAll('#customers-tbody tr'));
+      }
+      function __customersMatching(q) {
+        var query = (q || '').trim().toLowerCase();
+        return __customersAllRows().filter(function(row) {
           var hay = row.getAttribute('data-search') || '';
-          var match = !q || hay.indexOf(q) !== -1;
-          row.style.display = match ? '' : 'none';
-          if (match) visible++;
+          return !query || hay.indexOf(query) !== -1;
         });
+      }
+      function __customersRender() {
+        var query = document.getElementById('customers-search').value || '';
+        var matching = __customersMatching(query);
+        var total = matching.length;
+        var allCount = __customersAllRows().length;
+        var pageSize = __customersPageSize;
+        var totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if (__customersPage > totalPages) __customersPage = totalPages;
+        if (__customersPage < 1) __customersPage = 1;
+        var start = (__customersPage - 1) * pageSize;
+        var end = start + pageSize;
+
+        __customersAllRows().forEach(function(row) { row.style.display = 'none'; });
+        matching.slice(start, end).forEach(function(row) { row.style.display = ''; });
+
         var emptyEl = document.getElementById('customers-empty');
         var tableEl = document.getElementById('customers-table');
-        if (rows.length > 0 && visible === 0) {
+        var pagerEl = document.getElementById('customers-pagination');
+        if (allCount > 0 && total === 0) {
           emptyEl.style.display = 'block';
           tableEl.style.display = 'none';
+          pagerEl.style.display = 'none';
         } else {
           emptyEl.style.display = 'none';
           tableEl.style.display = '';
+          pagerEl.style.display = '';
         }
-        document.getElementById('customers-count').textContent = q ? '(' + visible + ' of ' + rows.length + ')' : '(' + rows.length + ')';
+
+        document.getElementById('customers-count').textContent =
+          query ? '(' + total + ' of ' + allCount + ')' : '(' + allCount + ')';
+        document.getElementById('customers-page-info').textContent =
+          total === 0 ? '0 results' : (start + 1) + '–' + Math.min(end, total) + ' of ' + total;
+        document.getElementById('customers-page-of').textContent = 'Page ' + __customersPage + ' of ' + totalPages;
+        document.getElementById('customers-prev').disabled  = __customersPage <= 1;
+        document.getElementById('customers-first').disabled = __customersPage <= 1;
+        document.getElementById('customers-next').disabled  = __customersPage >= totalPages;
+        document.getElementById('customers-last').disabled  = __customersPage >= totalPages;
       }
+      function filterCustomers(/* query (read live from input) */) {
+        __customersPage = 1;
+        __customersRender();
+      }
+      function customersChangePage(delta) {
+        __customersPage += delta;
+        __customersRender();
+      }
+      function customersGoTo(page) {
+        if (page === -1) {
+          var total = __customersMatching(document.getElementById('customers-search').value).length;
+          __customersPage = Math.max(1, Math.ceil(total / __customersPageSize));
+        } else {
+          __customersPage = page;
+        }
+        __customersRender();
+      }
+      function customersChangePageSize(size) {
+        __customersPageSize = parseInt(size, 10) || 50;
+        __customersPage = 1;
+        __customersRender();
+      }
+      // Initial render once the DOM is ready
+      if (document.getElementById('customers-tbody')) __customersRender();
       function copyToClipboard(text, btn) {
         if (navigator.clipboard) {
           navigator.clipboard.writeText(text).then(function() {
