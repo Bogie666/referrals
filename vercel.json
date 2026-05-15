@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/poll-jobs",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/poll-bookings",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

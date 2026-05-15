@@ -21,6 +21,7 @@ const supabase = require('../db');
 const {
   getAccessToken,
   getCompletedJobs,
+  getRecentJobs,
   getJobCustomFields,
   getCustomer,
   getCustomerContacts,
@@ -758,5 +759,167 @@ async function sendChiirpReEngage(customer, eventType, day) {
     status:      'sent',
   });
 }
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/cron/poll-bookings
+// Sweeps ServiceTitan for newly-CREATED jobs (any status) and
+// promotes the matching referrer's pending row to `booked` if the
+// job carries a "Referred by Code" custom field. Complements the
+// scheduler's booking_confirmed funnel beacon by catching jobs
+// booked via other channels (CSR phone bookings, ST web form, etc).
+//
+// Vercel cron runs this every 15 min. Manual invocation:
+//   curl https://lexperks.com/api/cron/poll-bookings \
+//     -H "x-cron-secret: $CRON_SECRET"
+// ──────────────────────────────────────────────────────────────
+router.get('/poll-bookings', verifyCronAuth, async (req, res) => {
+  const startTime = Date.now();
+  const REFERRED_BY_CODE_TYPE_ID = parseInt(process.env.ST_REFERRED_BY_CODE_TYPE_ID || '406119323');
+  const results = {
+    jobsFound:        0,
+    jobsWithCode:     0,
+    referralsMatched: 0,
+    referralsUpdated: 0,
+    referralsCreated: 0,
+    errors:           [],
+  };
+
+  try {
+    const [{ data: pollState }, payoutSettings] = await Promise.all([
+      supabase.from('poll_state').select('last_polled_at').eq('id', 'bookings').single(),
+      loadPayoutSettings(),
+    ]);
+
+    const fallbackMs = 30 * 60 * 1000;
+    const maxLookbackHours = parseFloat(payoutSettings.max_lookback_hours) || DEFAULT_MAX_LOOKBACK_HOURS;
+    const earliestAllowed = Date.now() - maxLookbackHours * 60 * 60 * 1000;
+
+    const cursorTime = pollState?.last_polled_at
+      ? new Date(pollState.last_polled_at).getTime()
+      : Date.now() - fallbackMs;
+
+    const sinceMs = Math.max(cursorTime, earliestAllowed);
+    const since = new Date(sinceMs);
+
+    if (cursorTime < earliestAllowed) {
+      console.warn(`[Bookings] Cursor ${new Date(cursorTime).toISOString()} older than max_lookback_hours (${maxLookbackHours}h) — clamping`);
+    }
+
+    console.log(`[Bookings] Starting poll — jobs created since: ${since.toISOString()}`);
+
+    const token = await getAccessToken();
+    const jobs  = await getRecentJobs(token, since.toISOString());
+    results.jobsFound = jobs.length;
+    console.log(`[Bookings] Found ${jobs.length} job(s)`);
+
+    for (const job of jobs) {
+      try {
+        const jobId = job.id;
+        if (job.jobStatus === 'Canceled') continue;
+
+        const fields = await getJobCustomFields(token, jobId);
+        const referredByField = (fields || []).find(
+          f => f.typeId === REFERRED_BY_CODE_TYPE_ID && f.value
+        );
+        if (!referredByField) continue;
+
+        const code = normalizeCode(referredByField.value);
+        results.jobsWithCode++;
+
+        const { data: referrer } = await supabase
+          .from('customers')
+          .select('id, referral_code')
+          .eq('referral_code', code)
+          .maybeSingle();
+
+        if (!referrer) {
+          await supabase.from('job_events').insert({
+            st_job_id:      String(jobId),
+            st_customer_id: String(job.customerId || ''),
+            event_type:     'referral.unmatched',
+            payload:        { code, jobId, source: 'poll-bookings' },
+            processed:      true,
+          });
+          continue;
+        }
+
+        results.referralsMatched++;
+
+        // Fetch friend's contact info from ST so the booked row carries
+        // a name + phone rather than waiting for the completed poller.
+        let friendName = '';
+        let friendPhone = '';
+        try {
+          if (job.customerId) {
+            const friendCustomer = await getCustomer(token, job.customerId);
+            friendName = friendCustomer?.name || '';
+            const contacts = await getCustomerContacts(token, job.customerId);
+            const phoneEntry = (contacts || []).find(c => c.type === 'MobilePhone' || c.type === 'Phone');
+            friendPhone = phoneEntry?.value?.replace(/\D/g, '').replace(/^1/, '') || '';
+          }
+        } catch (err) {
+          console.warn(`[Bookings] Couldn't fetch friend info for job ${jobId}: ${err.message}`);
+        }
+
+        // Promote existing pending row if present, else insert booked
+        const { data: existing } = await supabase
+          .from('referrals')
+          .select('id, status')
+          .eq('referrer_id', referrer.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from('referrals')
+            .update({
+              status:          'booked',
+              referred_job_id: String(jobId),
+              referred_st_id:  job.customerId ? String(job.customerId) : null,
+              ...(friendName  && { referred_name:  friendName }),
+              ...(friendPhone && { referred_phone: friendPhone }),
+            })
+            .eq('id', existing.id);
+          results.referralsUpdated++;
+        } else {
+          await supabase.from('referrals').insert({
+            referrer_id:     referrer.id,
+            status:          'booked',
+            referred_job_id: String(jobId),
+            referred_st_id:  job.customerId ? String(job.customerId) : null,
+            referred_name:   friendName  || null,
+            referred_phone: friendPhone || null,
+          });
+          results.referralsCreated++;
+        }
+
+        await supabase.from('job_events').insert({
+          st_job_id:      String(jobId),
+          st_customer_id: String(job.customerId || ''),
+          event_type:     'referral.booked',
+          payload:        { code, jobId, source: 'poll-bookings' },
+          processed:      true,
+        });
+      } catch (err) {
+        console.error(`[Bookings] Error on job ${job.id}:`, err.message);
+        results.errors.push({ jobId: job.id, error: err.message });
+      }
+    }
+
+    await supabase.from('poll_state').upsert({
+      id: 'bookings',
+      last_polled_at: new Date().toISOString(),
+    });
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Bookings] Complete in ${duration}s —`, results);
+    res.json({ ok: true, duration, ...results });
+  } catch (err) {
+    console.error('[Bookings] Fatal error:', err.message);
+    res.status(500).json({ error: err.message, results });
+  }
+});
 
 module.exports = router;

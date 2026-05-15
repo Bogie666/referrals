@@ -217,7 +217,12 @@ router.post('/funnel/event', async (req, res) => {
   // scheduler confirms a booking — don't wait for the next poller run
   // (which only sees the friend's job once it's *completed* in ST).
   if (type === 'booking_confirmed' && referrerId) {
-    const stJobId = metadata?.st_job_id ? String(metadata.st_job_id) : null;
+    const stJobId      = metadata?.st_job_id     ? String(metadata.st_job_id)     : null;
+    const stCustomerId = metadata?.st_customer_id ? String(metadata.st_customer_id) : null;
+    const friendName   = metadata?.referred_name ? String(metadata.referred_name).trim().slice(0, 100) : null;
+    const friendPhone  = metadata?.referred_phone
+      ? String(metadata.referred_phone).replace(/\D/g, '').replace(/^1/, '').slice(0, 15) || null
+      : null;
 
     const { data: existing } = await supabase
       .from('referrals')
@@ -228,20 +233,18 @@ router.post('/funnel/event', async (req, res) => {
       .limit(1)
       .maybeSingle();
 
+    const patch = {
+      status: 'booked',
+      ...(stJobId      && { referred_job_id: stJobId }),
+      ...(stCustomerId && { referred_st_id:  stCustomerId }),
+      ...(friendName   && { referred_name:   friendName }),
+      ...(friendPhone  && { referred_phone:  friendPhone }),
+    };
+
     if (existing) {
-      await supabase
-        .from('referrals')
-        .update({
-          status: 'booked',
-          ...(stJobId && { referred_job_id: stJobId }),
-        })
-        .eq('id', existing.id);
+      await supabase.from('referrals').update(patch).eq('id', existing.id);
     } else {
-      await supabase.from('referrals').insert({
-        referrer_id: referrerId,
-        status: 'booked',
-        ...(stJobId && { referred_job_id: stJobId }),
-      });
+      await supabase.from('referrals').insert({ referrer_id: referrerId, ...patch });
     }
   }
 
