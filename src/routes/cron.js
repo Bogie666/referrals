@@ -336,7 +336,7 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
   // Look up the referrer by their referral_code
   const { data: referrer } = await supabase
     .from('customers')
-    .select('id, name, referral_code')
+    .select('id, name, referral_code, payout_eligible')
     .eq('referral_code', code)
     .single();
 
@@ -358,6 +358,16 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
 
   const referredName = toTitleCase(referredCustomer.name || 'Unknown');
 
+  // Eligibility gate — referrers flagged as ineligible (internal
+  // employees, owners) still have their referrals tracked but the
+  // row is routed straight to 'rejected' so it never lands in the
+  // payout queue. referred_job_value is still recorded so the
+  // revenue tile reflects their friend's job.
+  const ineligible = referrer.payout_eligible === false;
+  const targetStatus = ineligible ? 'rejected' : 'completed';
+  const rewardAmount = ineligible ? null : payout.amount;
+  const rejectionReason = ineligible ? 'Referrer not eligible for payouts' : null;
+
   // Check if this referral was already recorded (dedup by referrer + ST customer)
   const { data: existingReferral } = await supabase
     .from('referrals')
@@ -367,21 +377,22 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
     .single();
 
   if (existingReferral) {
-    // Already tracked — upgrade to completed if still pending/booked
+    // Already tracked — promote to the right status if still pending/booked
     if (existingReferral.status === 'pending' || existingReferral.status === 'booked') {
       await supabase
         .from('referrals')
         .update({
-          status:             'completed',
+          status:             targetStatus,
           referred_name:      referredName,
           referred_job_id:    String(jobId),
           referred_job_value: jobTotal,
-          reward_amount:      payout.amount,
+          reward_amount:      rewardAmount,
+          ...(rejectionReason && { rejection_reason: rejectionReason }),
           tier_id:            null,
           updated_at:         new Date().toISOString(),
         })
         .eq('id', existingReferral.id);
-      console.log(`[Poller] Referral ${existingReferral.id} upgraded to completed | Payout: $${payout.amount} (${payout.rule})`);
+      console.log(`[Poller] Referral ${existingReferral.id} → ${targetStatus}${ineligible ? ' (referrer ineligible)' : ` | Payout: $${payout.amount} (${payout.rule})`}`);
       results.referralsMatched++;
     } else {
       console.log(`[Poller] Referral ${existingReferral.id} already in status: ${existingReferral.status}`);
@@ -389,7 +400,7 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
     return;
   }
 
-  // Create new referral record as completed (ready for payout)
+  // Create new referral record
   const { data: newReferral, error: insertErr } = await supabase
     .from('referrals')
     .insert({
@@ -398,8 +409,9 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
       referred_st_id:     String(stCustomerId),
       referred_job_id:    String(jobId),
       referred_job_value: jobTotal,
-      reward_amount:      payout.amount,
-      status:             'completed',
+      reward_amount:      rewardAmount,
+      status:             targetStatus,
+      ...(rejectionReason && { rejection_reason: rejectionReason }),
     })
     .select()
     .single();

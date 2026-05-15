@@ -153,7 +153,7 @@ async function getTopReferrers(limit = 10) {
 async function getAllCustomers(limit = 500) {
   const { data, error } = await supabase
     .from('customers')
-    .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, created_at')
+    .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, payout_eligible, created_at')
     .order('created_at', { ascending: false })
     .limit(limit);
 
