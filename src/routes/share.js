@@ -82,23 +82,28 @@ async function loadReferrals(customerId, limit = 10) {
 
 function computeStats(customer, referrals) {
   const rewardedReferrals = referrals.filter(r => r.status === 'rewarded');
-  const pendingReferrals  = referrals.filter(r => r.status === 'completed');
-  const inFlightReferrals = referrals.filter(r => ['pending', 'booked'].includes(r.status));
+  const completedReferrals = referrals.filter(r => r.status === 'completed');
+  const bookedReferrals    = referrals.filter(r => r.status === 'booked');
+  const activeReferrals    = referrals.filter(r => ['booked', 'completed', 'rewarded'].includes(r.status));
 
   const earned = parseFloat(customer.total_rewards || 0)
     || rewardedReferrals.reduce((s, r) => s + parseFloat(r.reward_amount || 0), 0);
 
-  const pending = pendingReferrals.reduce((s, r) => s + parseFloat(r.reward_amount || 0), 0);
+  // "In flight" $ — only count completed (job done, reward calculated)
+  // Booked referrals don't have a reward amount yet because it depends
+  // on the eventual invoice total.
+  const pending = completedReferrals.reduce((s, r) => s + parseFloat(r.reward_amount || 0), 0);
 
-  const referralsCount = parseInt(customer.total_referrals || 0)
-    || rewardedReferrals.length;
+  // Active = any friend that has taken action beyond clicking the link.
+  const referralsCount = activeReferrals.length;
 
   return {
     referralsCount,
     earned,
     pending,
-    pendingCount: pendingReferrals.length,
-    inFlightCount: inFlightReferrals.length,
+    pendingCount:  completedReferrals.length,
+    bookedCount:   bookedReferrals.length,
+    inFlightCount: bookedReferrals.length + completedReferrals.length,
   };
 }
 
@@ -170,6 +175,7 @@ function statusLabel(r) {
 function amountLabel(r) {
   if (r.status === 'rewarded')  return { text: formatCurrency(r.reward_amount), pending: false };
   if (r.status === 'completed') return { text: formatCurrency(r.reward_amount) + ' pending', pending: true };
+  if (r.status === 'booked')    return { text: 'Pending', pending: true };
   return { text: '—', pending: false };
 }
 
@@ -292,12 +298,25 @@ function renderAuthBody({ settings, customer, referrals, stats }) {
   const discount    = settings.discountAmount;
   const minJob      = settings.minJobValue;
 
-  const pendingHtml = stats.pending > 0
-    ? `<div class="pending-callout">
+  const pendingHtml = (() => {
+    if (stats.pending > 0) {
+      const friendsCopy = stats.pendingCount > 0
+        ? ` — ${stats.pendingCount} ${stats.pendingCount === 1 ? "friend's job is" : "friends' jobs are"} in progress`
+        : '';
+      return `<div class="pending-callout">
          <div class="pending-callout-icon">$</div>
-         <div>You have <strong>${formatCurrency(stats.pending)} in flight</strong>${stats.pendingCount > 0 ? ` — ${stats.pendingCount} ${stats.pendingCount === 1 ? "friend's job is" : "friends' jobs are"} in progress` : ''}</div>
-       </div>`
-    : '';
+         <div>You have <strong>${formatCurrency(stats.pending)} in flight</strong>${friendsCopy}</div>
+       </div>`;
+    }
+    if (stats.bookedCount > 0) {
+      const verb = stats.bookedCount === 1 ? 'booked' : 'booked';
+      return `<div class="pending-callout">
+         <div class="pending-callout-icon">🎉</div>
+         <div><strong>${stats.bookedCount} friend${stats.bookedCount === 1 ? '' : 's'} ${verb}!</strong> Your reward (${settings.payoutPercentage}% up to ${formatCurrency(settings.payoutCap)}) is calculated once their service is complete.</div>
+       </div>`;
+    }
+    return '';
+  })();
 
   const historyHtml = referrals.length === 0
     ? `<div style="text-align:center; padding:18px 8px 4px; color:var(--slate-500); font-size:14px;">

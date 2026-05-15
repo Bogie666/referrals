@@ -1416,7 +1416,13 @@ function renderReferralsTab(referrals, canWrite = true) {
                   ${r.referrer?.email ? `<div class="td-sub">${r.referrer.email}</div>` : ''}
                 </td>
                 <td>
-                  <div class="td-name">${r.referred_name || '(not yet booked)'}</div>
+                  <div class="td-name">${
+                    r.referred_name
+                      ? r.referred_name
+                      : (r.status === 'pending'
+                          ? '(not yet booked)'
+                          : '(name pending)')
+                  }</div>
                   <div class="td-sub">${r.referred_phone || r.referred_email || ''}</div>
                 </td>
                 <td>${r.referred_job_value ? formatCurrency(r.referred_job_value) : '—'}</td>
