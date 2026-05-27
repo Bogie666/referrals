@@ -203,7 +203,7 @@ function renderLogin(error = '') {
 </html>`;
 }
 
-function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentActivity, timeline, monthlyTrend, settings, adminUsers, currentUser, systemStatus, activeTab = 'overview' }) {
+function renderDashboard({ stats, referrals, topReferrers, allCustomers, customersTotalCount, recentActivity, timeline, monthlyTrend, settings, adminUsers, currentUser, systemStatus, activeTab = 'overview' }) {
   const canWrite = currentUser?.role !== 'viewer';
   const navItems = [
     { id: 'overview',   label: 'Overview',       href: '/admin' },
@@ -920,7 +920,7 @@ function renderDashboard({ stats, referrals, topReferrers, allCustomers, recentA
 
   ${activeTab === 'overview' ? renderOverview({ stats, referrals, topReferrers, recentActivity, timeline, systemStatus, trendLabels, trendCreated, trendRewarded }) : ''}
   ${activeTab === 'referrals' ? renderReferralsTab(referrals, canWrite) : ''}
-  ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || [], canWrite) : ''}
+  ${activeTab === 'customers' ? renderReferrersTab(topReferrers, allCustomers || [], canWrite, customersTotalCount || 0) : ''}
   ${activeTab === 'activity'  ? renderActivityTab(timeline || []) : ''}
   ${activeTab === 'settings'  ? renderSettingsTab(settings || {}, adminUsers || []) : ''}
 
@@ -1524,8 +1524,9 @@ function renderReferralsTab(referrals, canWrite = true) {
   `;
 }
 
-function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
+function renderReferrersTab(topReferrers, allCustomers, canWrite = true, customersTotalCount = 0) {
   const customers = allCustomers || [];
+  const totalCount = customersTotalCount || customers.length;
   return `
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap;">
       <div>
@@ -1574,11 +1575,11 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
 
     <div class="card">
       <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-        <h3>All Customers <span style="color:var(--muted);font-weight:500;font-size:13px;" id="customers-count">(${customers.length})</span></h3>
+        <h3>All Customers <span style="color:var(--muted);font-weight:500;font-size:13px;" id="customers-count">(${totalCount.toLocaleString()} total)</span></h3>
         <input
           type="search"
           id="customers-search"
-          placeholder="Search name, phone, email, or code..."
+          placeholder="Search all ${totalCount.toLocaleString()} customers by name, phone, email, or code..."
           style="
             padding:8px 14px; border:1px solid var(--border); border-radius:8px;
             font-size:13px; width:280px; max-width:100%;
@@ -1686,81 +1687,101 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true) {
     </div>
 
     <script>
-      var __customersPageSize = 50;
-      var __customersPage = 1;
+      var __searchTimer = null;
+      var __searchMode = false;
+      var __canWrite = ${canWrite};
 
-      function __customersAllRows() {
-        return Array.prototype.slice.call(document.querySelectorAll('#customers-tbody tr'));
-      }
-      function __customersMatching(q) {
-        var query = (q || '').trim().toLowerCase();
-        return __customersAllRows().filter(function(row) {
-          var hay = row.getAttribute('data-search') || '';
-          return !query || hay.indexOf(query) !== -1;
-        });
-      }
-      function __customersRender() {
-        var query = document.getElementById('customers-search').value || '';
-        var matching = __customersMatching(query);
-        var total = matching.length;
-        var allCount = __customersAllRows().length;
-        var pageSize = __customersPageSize;
-        var totalPages = Math.max(1, Math.ceil(total / pageSize));
-        if (__customersPage > totalPages) __customersPage = totalPages;
-        if (__customersPage < 1) __customersPage = 1;
-        var start = (__customersPage - 1) * pageSize;
-        var end = start + pageSize;
-
-        __customersAllRows().forEach(function(row) { row.style.display = 'none'; });
-        matching.slice(start, end).forEach(function(row) { row.style.display = ''; });
-
-        var emptyEl = document.getElementById('customers-empty');
-        var tableEl = document.getElementById('customers-table');
-        var pagerEl = document.getElementById('customers-pagination');
-        if (allCount > 0 && total === 0) {
-          emptyEl.style.display = 'block';
-          tableEl.style.display = 'none';
-          pagerEl.style.display = 'none';
-        } else {
-          emptyEl.style.display = 'none';
-          tableEl.style.display = '';
-          pagerEl.style.display = '';
+      function filterCustomers(query) {
+        clearTimeout(__searchTimer);
+        var q = (query || '').trim();
+        if (q.length < 2) {
+          if (__searchMode) __restoreDefaultView();
+          return;
         }
+        document.getElementById('customers-page-info').textContent = 'Searching…';
+        __searchTimer = setTimeout(function() { __serverSearch(q); }, 300);
+      }
 
-        document.getElementById('customers-count').textContent =
-          query ? '(' + total + ' of ' + allCount + ')' : '(' + allCount + ')';
-        document.getElementById('customers-page-info').textContent =
-          total === 0 ? '0 results' : (start + 1) + '–' + Math.min(end, total) + ' of ' + total;
-        document.getElementById('customers-page-of').textContent = 'Page ' + __customersPage + ' of ' + totalPages;
-        document.getElementById('customers-prev').disabled  = __customersPage <= 1;
-        document.getElementById('customers-first').disabled = __customersPage <= 1;
-        document.getElementById('customers-next').disabled  = __customersPage >= totalPages;
-        document.getElementById('customers-last').disabled  = __customersPage >= totalPages;
+      function __serverSearch(q) {
+        fetch('/admin/api/customers/search?q=' + encodeURIComponent(q))
+          .then(function(r) { return r.json(); })
+          .then(function(results) {
+            __searchMode = true;
+            var tbody = document.getElementById('customers-tbody');
+            var emptyEl = document.getElementById('customers-empty');
+            var tableEl = document.getElementById('customers-table');
+            var pagerEl = document.getElementById('customers-pagination');
+
+            if (!results.length) {
+              tbody.innerHTML = '';
+              emptyEl.style.display = 'block';
+              tableEl.style.display = 'none';
+              pagerEl.style.display = 'none';
+            } else {
+              tbody.innerHTML = results.map(function(c) {
+                return __renderCustomerRow(c);
+              }).join('');
+              emptyEl.style.display = 'none';
+              tableEl.style.display = '';
+              pagerEl.style.display = 'none';
+            }
+            document.getElementById('customers-count').textContent = '(' + results.length + ' results)';
+          })
+          .catch(function() {
+            document.getElementById('customers-page-info').textContent = 'Search failed';
+          });
       }
-      function filterCustomers(/* query (read live from input) */) {
-        __customersPage = 1;
-        __customersRender();
+
+      function __restoreDefaultView() {
+        __searchMode = false;
+        location.reload();
       }
-      function customersChangePage(delta) {
-        __customersPage += delta;
-        __customersRender();
+
+      function __renderCustomerRow(c) {
+        var ineligible = c.payout_eligible === false;
+        return '<tr>' +
+          '<td><div class="td-name">' + __esc(c.name) +
+            (ineligible ? ' <span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#fee2e2;color:#991b1b;border-radius:999px;font-size:10px;font-weight:700;">INELIGIBLE</span>' : '') +
+            '</div>' +
+            (c.st_customer_id ? '<div class="td-sub">ST: ' + __esc(c.st_customer_id) + '</div>' : '') +
+          '</td>' +
+          '<td style="white-space:nowrap;">' + __fmtPhone(c.phone) + '</td>' +
+          '<td>' + (c.email || '—') + '</td>' +
+          '<td>' + (c.referral_code
+            ? '<span style="display:inline-flex;align-items:center;gap:6px;">' +
+              '<code style="font-size:12px;background:var(--code-bg);padding:3px 8px;border-radius:4px;font-weight:600;">' + c.referral_code + '</code>' +
+              '<button type="button" onclick="copyToClipboard(\\'' + c.referral_code + '\\', this)" style="background:none;border:0;cursor:pointer;font-size:12px;color:var(--muted);" title="Copy code">📋</button>' +
+              '</span>' : '—') +
+          '</td>' +
+          '<td>' + (c.referral_link
+            ? '<button type="button" onclick="copyToClipboard(\\'' + __esc(c.referral_link).replace(/'/g, "\\\\'") + '\\', this)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px;color:var(--text);">Copy link</button>'
+            : '—') +
+          '</td>' +
+          '<td style="text-align:center;">' + (c.total_referrals || 0) + '</td>' +
+          '<td style="font-weight:600;color:' + (c.total_rewards > 0 ? 'var(--green)' : 'var(--muted)') + ';">$' + (parseFloat(c.total_rewards || 0)).toLocaleString() + '</td>' +
+          '<td style="white-space:nowrap;">' +
+            (__canWrite
+              ? '<button type="button" onclick="toggleEligibility(\\'' + c.id + '\\', ' + !ineligible + ', this)" style="background:' + (ineligible ? '#10b981' : 'transparent') + ';color:' + (ineligible ? '#fff' : 'var(--text)') + ';border:1px solid ' + (ineligible ? '#10b981' : 'var(--border)') + ';border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;">' + (ineligible ? 'Make eligible' : 'Eligible') + '</button>'
+              : '<span style="color:' + (ineligible ? '#991b1b' : 'var(--green)') + ';font-weight:600;">' + (ineligible ? 'Ineligible' : 'Eligible') + '</span>') +
+          '</td>' +
+          '<td style="color:var(--muted);white-space:nowrap;">' + __fmtDate(c.created_at) + '</td>' +
+        '</tr>';
       }
-      function customersGoTo(page) {
-        if (page === -1) {
-          var total = __customersMatching(document.getElementById('customers-search').value).length;
-          __customersPage = Math.max(1, Math.ceil(total / __customersPageSize));
-        } else {
-          __customersPage = page;
-        }
-        __customersRender();
+
+      function __esc(s) {
+        var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
       }
-      function customersChangePageSize(size) {
-        __customersPageSize = parseInt(size, 10) || 50;
-        __customersPage = 1;
-        __customersRender();
+      function __fmtPhone(raw) {
+        if (!raw) return '—';
+        var d = String(raw).replace(/\\D/g, '');
+        if (d.length === 10) return '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+        if (d.length === 11 && d[0] === '1') return '(' + d.slice(1,4) + ') ' + d.slice(4,7) + '-' + d.slice(7);
+        return raw;
       }
-      // Initial render once the DOM is ready
-      if (document.getElementById('customers-tbody')) __customersRender();
+      function __fmtDate(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' });
+      }
       function copyToClipboard(text, btn) {
         if (navigator.clipboard) {
           navigator.clipboard.writeText(text).then(function() {

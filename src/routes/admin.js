@@ -114,11 +114,11 @@ router.get('/referrals', requireAdmin, async (req, res) => {
 // ──────────────────────────────────────────────────────────────
 router.get('/referrers', requireAdmin, async (req, res) => {
   try {
-    const [data, allCustomers] = await Promise.all([
+    const [data, { customers: allCustomers, totalCount: customersTotalCount }] = await Promise.all([
       loadDashboardData(),
       getAllCustomers(),
     ]);
-    res.send(renderDashboard({ ...data, allCustomers, currentUser: req.adminUser, activeTab: 'customers' }));
+    res.send(renderDashboard({ ...data, allCustomers, customersTotalCount, currentUser: req.adminUser, activeTab: 'customers' }));
   } catch (err) {
     console.error('[Admin] Referrers error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
@@ -152,6 +152,35 @@ router.get('/settings', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('[Admin] Settings error:', err.message);
     res.status(500).send('Dashboard error: ' + err.message);
+  }
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /admin/api/customers/search?q=...
+// Server-side search across all customers — bypasses the row
+// limit on the page-load query. Searches name, phone, email,
+// referral_code, and st_customer_id with case-insensitive match.
+// ──────────────────────────────────────────────────────────────
+router.get('/api/customers/search', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q || q.length < 2) return res.json([]);
+
+    const pattern = `%${q}%`;
+    const { data, error } = await supabase
+      .from('customers')
+      .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, payout_eligible, created_at')
+      .or(`name.ilike.${pattern},phone.ilike.${pattern},email.ilike.${pattern},referral_code.ilike.${pattern},st_customer_id.ilike.${pattern}`)
+      .order('name', { ascending: true })
+      .limit(100);
+
+    if (error) {
+      console.error('[Admin] customer search failed:', error.message);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json(data || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
