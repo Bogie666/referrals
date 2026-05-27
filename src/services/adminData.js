@@ -150,18 +150,23 @@ async function getTopReferrers(limit = 10) {
  * staff can look anyone up — including customers who've been enrolled
  * but haven't yet had a referral come back.
  */
-async function getAllCustomers(limit = 10000) {
-  const { data, error } = await supabase
-    .from('customers')
-    .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, payout_eligible, created_at')
-    .order('created_at', { ascending: false })
-    .limit(limit);
+async function getAllCustomers(limit = 50) {
+  const [{ data, error }, { count: totalCount }] = await Promise.all([
+    supabase
+      .from('customers')
+      .select('id, name, phone, email, st_customer_id, total_referrals, total_rewards, referral_link, referral_code, payout_eligible, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    supabase
+      .from('customers')
+      .select('id', { count: 'exact', head: true }),
+  ]);
 
   if (error) {
     console.error('[adminData] getAllCustomers failed:', error.message, error.details || '');
-    return [];
+    return { customers: [], totalCount: 0 };
   }
-  return data || [];
+  return { customers: data || [], totalCount: totalCount || 0 };
 }
 
 /**
