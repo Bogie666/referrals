@@ -1754,7 +1754,10 @@ function renderReferrersTab(topReferrers, allCustomers, canWrite = true, custome
               '</span>' : '—') +
           '</td>' +
           '<td>' + (c.referral_link
-            ? '<button type="button" onclick="copyToClipboard(\\'' + __esc(c.referral_link).replace(/'/g, "\\\\'") + '\\', this)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px;color:var(--text);">Copy link</button>'
+            ? '<div style="display:flex;gap:4px;flex-wrap:nowrap;">' +
+              '<button type="button" onclick="copyToClipboard(\\'' + __esc(c.referral_link).replace(/'/g, "\\\\'") + '\\', this)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px;color:var(--text);">Copy link</button>' +
+              (__canWrite ? '<button type="button" onclick="resendInvite(\\'' + c.id + '\\', this)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text);" title="Resend Chiirp invite text + email">📨</button>' : '') +
+              '</div>'
             : '—') +
           '</td>' +
           '<td style="text-align:center;">' + (c.total_referrals || 0) + '</td>' +
