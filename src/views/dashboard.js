@@ -2208,6 +2208,10 @@ function renderSettingsTab(settings, adminUsers) {
                 </td>
                 <td style="color:var(--muted);white-space:nowrap;">${u.last_login_at ? formatDate(u.last_login_at) : 'Never'}</td>
                 <td style="white-space:nowrap;">
+                  <button class="btn-sm" style="background:var(--navy);color:#fff;margin-right:4px;"
+                    onclick="changePassword('${u.id}', '${u.name.replace(/'/g, "\\'")}')">
+                    🔑 Password
+                  </button>
                   ${u.role !== 'super_admin' ? `
                     <button class="btn-sm" style="background:var(--navy);color:#fff;margin-right:4px;"
                       onclick="editUser('${u.id}', '${u.name.replace(/'/g, "\\'")}', '${u.email}', '${u.role}')">
@@ -2323,10 +2327,10 @@ function renderSettingsTab(settings, adminUsers) {
       if (newName === null) return;
       var newEmail = prompt('Email:', email);
       if (newEmail === null) return;
-      var newRole = prompt('Role (super_admin, admin, or viewer):', role);
+      var newRole = prompt('Role (admin or viewer):', role);
       if (newRole === null) return;
-      if (newRole !== 'admin' && newRole !== 'user') {
-        alert('Role must be "admin" or "user".');
+      if (newRole !== 'admin' && newRole !== 'viewer' && newRole !== 'super_admin') {
+        alert('Role must be "admin", "viewer", or "super_admin".');
         return;
       }
       var newPassword = prompt('New password (leave blank to keep current):');
@@ -2344,6 +2348,26 @@ function renderSettingsTab(settings, adminUsers) {
           if (data.success) location.reload();
           else alert('Error: ' + (data.error || 'Unknown'));
         });
+    }
+
+    function changePassword(id, name) {
+      var pw = prompt('New password for ' + name + ' (min 8 chars):');
+      if (pw === null) return;
+      if (pw.length < 8) { alert('Password must be at least 8 characters.'); return; }
+      var confirm2 = prompt('Confirm new password:');
+      if (confirm2 === null) return;
+      if (pw !== confirm2) { alert('Passwords did not match.'); return; }
+
+      fetch('/admin/api/users/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      }).then(function(res) { return res.json().then(function(b) { return { ok: res.ok, body: b }; }); })
+        .then(function(r) {
+          if (r.ok && r.body.success) alert('Password updated for ' + name + '.');
+          else alert('Failed: ' + (r.body.error || 'Unknown error'));
+        })
+        .catch(function(err) { alert('Network error: ' + err.message); });
     }
 
     async function toggleUser(id, newActive) {

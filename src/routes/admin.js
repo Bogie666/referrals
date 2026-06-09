@@ -612,9 +612,19 @@ router.put('/api/users/:id', requireSuperAdmin, async (req, res) => {
 
   if (name !== undefined) updates.name = name;
   if (email !== undefined) updates.email = email.toLowerCase().trim();
-  if (role !== undefined) updates.role = role;
+  if (role !== undefined) {
+    if (!['super_admin', 'admin', 'viewer'].includes(role)) {
+      return res.status(400).json({ error: 'Role must be super_admin, admin, or viewer' });
+    }
+    updates.role = role;
+  }
   if (active !== undefined) updates.active = active;
-  if (password) updates.password_hash = await hashPassword(password);
+  if (password) {
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    updates.password_hash = await hashPassword(password);
+  }
 
   const { data, error } = await supabase
     .from('admin_users')
