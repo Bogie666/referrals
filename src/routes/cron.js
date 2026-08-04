@@ -21,6 +21,7 @@ const supabase = require('../db');
 const {
   getAccessToken,
   getCompletedJobs,
+  getCompletedJobsModifiedSince,
   getRecentJobs,
   getJobCustomFields,
   getCustomer,
@@ -163,29 +164,30 @@ async function processJob(job, token, payoutSettings, results) {
     payoutSettings.min_job_value ?? process.env.MIN_JOB_VALUE ?? '150'
   );
 
-  // ── Filter: minimum job value ──────────────────────────────
-  if ((total || 0) < minJobValue) {
-    console.log(`[Poller] Job ${jobId} skipped — total $${total} below minimum $${minJobValue}`);
-    return;
-  }
-
-  results.jobsQualified++;
+  const REFERRAL_CODE_TYPE_ID      = parseInt(process.env.ST_REFERRAL_CODE_TYPE_ID || '406119043');
+  const REFERRED_BY_CODE_TYPE_ID   = parseInt(process.env.ST_REFERRED_BY_CODE_TYPE_ID || '406119323');
 
   // ── Fetch customer ─────────────────────────────────────────
+  // Fetched up front because the referral-match step below needs it,
+  // and that step must run BEFORE the min-value gate (see below).
   const customer = await getCustomer(token, customerId);
   if (!customer) {
     console.warn(`[Poller] Job ${jobId} — customer ${customerId} not found`);
     return;
   }
 
-  const REFERRAL_CODE_TYPE_ID      = parseInt(process.env.ST_REFERRAL_CODE_TYPE_ID || '406119043');
-  const REFERRED_BY_CODE_TYPE_ID   = parseInt(process.env.ST_REFERRED_BY_CODE_TYPE_ID || '406119323');
-
   // ── Step 6: Check if this JOB has a "Referred by Code" ─────
   // Field 406119323 lives on the JOB record (set by CSR at booking
   // or by the online scheduler via PATCH on the job), NOT on the
   // customer. The JPM v2 jobs list endpoint does not reliably
   // return customFields inline, so fetch them explicitly per job.
+  //
+  // CRITICAL: this MATCH runs before the minimum-job-value gate.
+  // A referred friend's first completed job must credit the referrer
+  // regardless of ticket size — the $min threshold governs only
+  // whether a PAYOUT is owed (decided inside matchReferralByCode),
+  // never whether the referral is tracked. (Previously the min gate
+  // returned early and silently dropped every sub-min referral.)
   const jobCustomFields = job.customFields && job.customFields.length
     ? job.customFields
     : await getJobCustomFields(token, jobId);
@@ -195,19 +197,27 @@ async function processJob(job, token, payoutSettings, results) {
   );
 
   if (referredByField) {
-    const invoiceTotal = total || 0;
-    const payout = calculatePayout({ invoiceTotal, settings: payoutSettings });
-
     await matchReferralByCode(
       referredByField.value,
       customer,
       customerId,
       jobId,
-      invoiceTotal,
-      payout,
+      total || 0,
+      payoutSettings,
+      minJobValue,
       results
     );
   }
+
+  // ── Filter: minimum job value (ENROLLMENT branch only) ─────
+  // Below-min jobs don't enroll the customer as a NEW referrer, but
+  // any referral match above has already been recorded.
+  if ((total || 0) < minJobValue) {
+    console.log(`[Poller] Job ${jobId} — total $${total} below minimum $${minJobValue}; skipping enrollment (referral match, if any, already handled)`);
+    return;
+  }
+
+  results.jobsQualified++;
 
   // ── Check if referral code already exists ──────────────────
   const existingCode = (customer.customFields || []).find(
@@ -324,7 +334,7 @@ async function processJob(job, token, payoutSettings, results) {
 }
 
 // ── Step 6: Match "Referred by Code" back to referrer ────────
-async function matchReferralByCode(referredByCode, referredCustomer, stCustomerId, jobId, jobTotal, payout, results) {
+async function matchReferralByCode(referredByCode, referredCustomer, stCustomerId, jobId, jobTotal, payoutSettings, minJobValue, results) {
   const code = normalizeCode(referredByCode);
   console.log(`[Poller] Job ${jobId} has "Referred by Code": ${referredByCode} (normalized: ${code}) — matching to referrer`);
 
@@ -332,6 +342,10 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
     console.warn(`[Poller] Empty/invalid "Referred by Code" on job ${jobId} — skipping`);
     return;
   }
+
+  const invoiceTotal = jobTotal || 0;
+  const belowMin = invoiceTotal < minJobValue;
+  const payout = calculatePayout({ invoiceTotal, settings: payoutSettings });
 
   // Look up the referrer by their referral_code
   const { data: referrer } = await supabase
@@ -358,15 +372,26 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
 
   const referredName = toTitleCase(referredCustomer.name || 'Unknown');
 
-  // Eligibility gate — referrers flagged as ineligible (internal
-  // employees, owners) still have their referrals tracked but the
-  // row is routed straight to 'rejected' so it never lands in the
-  // payout queue. referred_job_value is still recorded so the
-  // revenue tile reflects their friend's job.
+  // Status + reward resolution:
+  //   - Referrer flagged ineligible (employee/owner) → 'rejected', no payout.
+  //   - Job below min_job_value → 'rejected' (below threshold), no payout,
+  //     but referred_job_value is still recorded for honest revenue reporting.
+  //   - Otherwise → 'completed', payout = 5% capped at $250.
   const ineligible = referrer.payout_eligible === false;
-  const targetStatus = ineligible ? 'rejected' : 'completed';
-  const rewardAmount = ineligible ? null : payout.amount;
-  const rejectionReason = ineligible ? 'Referrer not eligible for payouts' : null;
+  let targetStatus, rewardAmount, rejectionReason;
+  if (ineligible) {
+    targetStatus = 'rejected';
+    rewardAmount = null;
+    rejectionReason = 'Referrer not eligible for payouts';
+  } else if (belowMin) {
+    targetStatus = 'rejected';
+    rewardAmount = null;
+    rejectionReason = `Job total $${invoiceTotal} below minimum $${minJobValue}`;
+  } else {
+    targetStatus = 'completed';
+    rewardAmount = payout.amount;
+    rejectionReason = null;
+  }
 
   // Check if this referral was already recorded (dedup by referrer + ST customer)
   const { data: existingReferral } = await supabase
@@ -374,7 +399,7 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
     .select('id, status')
     .eq('referrer_id', referrer.id)
     .eq('referred_st_id', String(stCustomerId))
-    .single();
+    .maybeSingle();
 
   if (existingReferral) {
     // Already tracked — promote to the right status if still pending/booked
@@ -385,15 +410,23 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
           status:             targetStatus,
           referred_name:      referredName,
           referred_job_id:    String(jobId),
-          referred_job_value: jobTotal,
+          referred_job_value: invoiceTotal,
           reward_amount:      rewardAmount,
           ...(rejectionReason && { rejection_reason: rejectionReason }),
           tier_id:            null,
           updated_at:         new Date().toISOString(),
         })
         .eq('id', existingReferral.id);
-      console.log(`[Poller] Referral ${existingReferral.id} → ${targetStatus}${ineligible ? ' (referrer ineligible)' : ` | Payout: $${payout.amount} (${payout.rule})`}`);
+      const detail = rewardAmount != null
+        ? ` | Payout: $${rewardAmount} (${payout.rule})`
+        : ` (no payout — ${rejectionReason})`;
+      console.log(`[Poller] Referral ${existingReferral.id} → ${targetStatus}${detail}`);
       results.referralsMatched++;
+
+      // Keep referrer's total_rewards in sync when a reward is now owed.
+      if (rewardAmount != null && rewardAmount > 0) {
+        await bumpReferrerRewards(referrer, rewardAmount);
+      }
     } else {
       console.log(`[Poller] Referral ${existingReferral.id} already in status: ${existingReferral.status}`);
     }
@@ -408,7 +441,7 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
       referred_name:      referredName,
       referred_st_id:     String(stCustomerId),
       referred_job_id:    String(jobId),
-      referred_job_value: jobTotal,
+      referred_job_value: invoiceTotal,
       reward_amount:      rewardAmount,
       status:             targetStatus,
       ...(rejectionReason && { rejection_reason: rejectionReason }),
@@ -431,7 +464,15 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
       .eq('id', referrer.id);
   });
 
-  console.log(`[Poller] New referral created: ${referredName} → ${referrer.name} (code: ${code}), invoice: $${jobTotal}, payout: $${payout.amount} (${payout.rule})`);
+  // Keep referrer's total_rewards in sync when a reward is owed.
+  if (rewardAmount != null && rewardAmount > 0) {
+    await bumpReferrerRewards(referrer, rewardAmount);
+  }
+
+  const detail = rewardAmount != null
+    ? `payout: $${rewardAmount} (${payout.rule})`
+    : `no payout — ${rejectionReason}`;
+  console.log(`[Poller] New referral created: ${referredName} → ${referrer.name} (code: ${code}), invoice: $${invoiceTotal}, ${detail}`);
   results.referralsMatched++;
 
   // Log the event
@@ -443,12 +484,30 @@ async function matchReferralByCode(referredByCode, referredCustomer, stCustomerI
       referredByCode: code,
       referrerId:     referrer.id,
       referredName,
-      jobTotal,
-      payoutAmount:   payout.amount,
-      payoutRule:     payout.rule,
+      jobTotal:       invoiceTotal,
+      status:         targetStatus,
+      payoutAmount:   rewardAmount,
+      payoutRule:     rewardAmount != null ? payout.rule : null,
+      rejectionReason,
     },
     processed:      true,
   });
+}
+
+// ── Keep customers.total_rewards in sync as rewards are earned ──
+// total_rewards reflects the cumulative reward AMOUNT owed/earned by
+// a referrer (distinct from payouts, which log actual disbursements).
+async function bumpReferrerRewards(referrer, delta) {
+  const { data: fresh } = await supabase
+    .from('customers')
+    .select('total_rewards')
+    .eq('id', referrer.id)
+    .maybeSingle();
+  const current = parseFloat(fresh?.total_rewards || 0);
+  await supabase
+    .from('customers')
+    .update({ total_rewards: Math.round((current + delta) * 100) / 100 })
+    .eq('id', referrer.id);
 }
 
 // ── Build the share-page URL (mirrors REFERRAL_BASE_URL's origin) ──
@@ -594,6 +653,105 @@ function toTitleCase(str) {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/cron/reconcile-codes
+// Reconciliation sweep for Bug 1: the "Referred by Code" custom
+// field is often entered by a CSR AFTER a job completes. The
+// completion poller (poll-jobs) only scans a job once, at
+// completion, keyed on completedOnOrAfter — so a code added later
+// is invisible to it forever and the referrer never gets credited.
+//
+// This route sweeps completed jobs by modifiedOnOrAfter, and for any
+// that carry a referred-by code but have no referral row yet, runs
+// the same match logic. Idempotent: matchReferralByCode dedups by
+// (referrer_id, referred_st_id) and skips jobs already recorded.
+//
+// Vercel cron runs this a few times a day. Manual / wider backfill:
+//   curl "https://lexperks.com/api/cron/reconcile-codes?hours=1440" \
+//     -H "x-cron-secret: $CRON_SECRET"
+// ─────────────────────────────────────────────────────────────
+router.get('/reconcile-codes', verifyCronAuth, async (req, res) => {
+  const startTime = Date.now();
+  const REFERRED_BY_CODE_TYPE_ID = parseInt(process.env.ST_REFERRED_BY_CODE_TYPE_ID || '406119323');
+  const results = {
+    jobsScanned:      0,
+    jobsWithCode:     0,
+    alreadyRecorded:  0,
+    referralsMatched: 0,
+    errors:           [],
+  };
+
+  try {
+    const payoutSettings = await loadPayoutSettings();
+    const minJobValue = parseFloat(payoutSettings.min_job_value ?? process.env.MIN_JOB_VALUE ?? '150');
+
+    // Default lookback 48h; allow ?hours= override for wider backfills.
+    const hours = Math.min(parseFloat(req.query.hours) || 48, 24 * 400);
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    console.log(`[Reconcile] Sweeping completed jobs modified since ${since.toISOString()} (${hours}h)`);
+
+    const token = await getAccessToken();
+    const jobs = await getCompletedJobsModifiedSince(token, since.toISOString());
+    results.jobsScanned = jobs.length;
+
+    for (const job of jobs) {
+      try {
+        const jobId = job.id;
+        const jobCustomFields = job.customFields && job.customFields.length
+          ? job.customFields
+          : await getJobCustomFields(token, jobId);
+
+        const referredByField = (jobCustomFields || []).find(
+          f => f.typeId === REFERRED_BY_CODE_TYPE_ID && f.value
+        );
+        if (!referredByField) continue;
+        results.jobsWithCode++;
+
+        // Skip if a referral row for this job already exists (any status
+        // beyond pending/booked means the completion poller already got it).
+        const { data: existingByJob } = await supabase
+          .from('referrals')
+          .select('id, status')
+          .eq('referred_job_id', String(jobId))
+          .maybeSingle();
+        if (existingByJob && ['completed', 'rewarded', 'rejected'].includes(existingByJob.status)) {
+          results.alreadyRecorded++;
+          continue;
+        }
+
+        const customer = await getCustomer(token, job.customerId);
+        if (!customer) {
+          console.warn(`[Reconcile] Job ${jobId} — customer ${job.customerId} not found`);
+          continue;
+        }
+
+        const before = results.referralsMatched;
+        await matchReferralByCode(
+          referredByField.value,
+          customer,
+          job.customerId,
+          jobId,
+          job.total || 0,
+          payoutSettings,
+          minJobValue,
+          results
+        );
+        if (results.referralsMatched === before) results.alreadyRecorded++;
+      } catch (err) {
+        console.error(`[Reconcile] Error on job ${job.id}:`, err.message);
+        results.errors.push({ jobId: job.id, error: err.message });
+      }
+    }
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Reconcile] Complete in ${duration}s —`, results);
+    return res.json({ success: true, duration: `${duration}s`, ...results });
+  } catch (err) {
+    console.error('[Reconcile] Fatal error:', err.message);
+    return res.status(500).json({ error: err.message, ...results });
+  }
+});
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/cron/re-engage

@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/poll-bookings",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-codes",
+      "schedule": "0 2,10,18 * * *"
     }
   ]
 }

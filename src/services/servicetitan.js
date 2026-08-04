@@ -121,6 +121,66 @@ async function getCompletedJobs(token, completedOnOrAfter) {
   }
 }
 
+// ── Get completed jobs MODIFIED since a timestamp ─────────────
+/**
+ * Like getCompletedJobs but keyed on modifiedOnOrAfter instead of
+ * completedOnOrAfter. This is the reconciliation sweep: a job's
+ * "Referred by Code" custom field is frequently entered by a CSR
+ * AFTER the job completes (correction, late data entry, manual add).
+ * The completion poller only ever sees a job once, at completion, so
+ * a code added later is invisible to it forever. Sweeping by
+ * modifiedOnOrAfter catches those late edits so the referrer still
+ * gets credited.
+ *
+ * @param {string} token
+ * @param {string} modifiedOnOrAfter - ISO 8601 timestamp
+ * @returns {Array} array of completed job objects
+ */
+async function getCompletedJobsModifiedSince(token, modifiedOnOrAfter) {
+  if (process.env.DEMO_MODE === 'true') {
+    console.log('[DEMO] Skipping ST modified-jobs poll');
+    return [];
+  }
+
+  const allJobs = [];
+  let page = 1;
+  const pageSize = 50;
+
+  try {
+    while (true) {
+      const res = await axios.get(
+        `${ST_API_BASE}/jpm/v2/tenant/${TENANT_ID}/jobs`,
+        {
+          headers: stHeaders(token),
+          params: {
+            jobStatus:         'Completed',
+            modifiedOnOrAfter,
+            pageSize,
+            page,
+          },
+        }
+      );
+
+      const jobs = res.data?.data || [];
+      allJobs.push(...jobs);
+
+      if (jobs.length < pageSize) break;
+      page++;
+
+      if (allJobs.length >= 500) {
+        console.warn('[ST API] Hit 500 job limit during reconcile poll — increase frequency or lookback window');
+        break;
+      }
+    }
+
+    return allJobs;
+
+  } catch (err) {
+    console.error('[ST API] getCompletedJobsModifiedSince failed:', err.response?.data || err.message);
+    throw err;
+  }
+}
+
 // ── Get recently-created jobs (any status) ────────────────────
 /**
  * Used by the bookings poller — we don't filter by jobStatus because
@@ -417,6 +477,7 @@ function simulateDemoContacts(customerId) {
 module.exports = {
   getAccessToken,
   getCompletedJobs,
+  getCompletedJobsModifiedSince,
   getRecentJobs,
   getJobCustomFields,
   getCustomer,
