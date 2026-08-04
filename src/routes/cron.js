@@ -686,8 +686,9 @@ router.get('/reconcile-codes', verifyCronAuth, async (req, res) => {
     const payoutSettings = await loadPayoutSettings();
     const minJobValue = parseFloat(payoutSettings.min_job_value ?? process.env.MIN_JOB_VALUE ?? '150');
 
-    // Default lookback 48h; allow ?hours= override for wider backfills.
-    const hours = Math.min(parseFloat(req.query.hours) || 48, 24 * 400);
+    // Default lookback 26h (cron runs every 8h → 3x overlap safety);
+    // allow ?hours= override for wider one-off backfills.
+    const hours = Math.min(parseFloat(req.query.hours) || 26, 24 * 400);
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
     console.log(`[Reconcile] Sweeping completed jobs modified since ${since.toISOString()} (${hours}h)`);
 

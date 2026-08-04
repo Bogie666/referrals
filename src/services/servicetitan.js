@@ -144,7 +144,13 @@ async function getCompletedJobsModifiedSince(token, modifiedOnOrAfter) {
 
   const allJobs = [];
   let page = 1;
-  const pageSize = 50;
+  const pageSize = 200;
+  // Background reconciliation sweep — the JPM list response carries
+  // customFields inline, so no per-job fetch is needed for most jobs.
+  // This tenant modifies ~800 completed jobs / 48h, so the old 500 cap
+  // silently truncated the window before reaching a late-coded job.
+  // Cap high enough to cover the window with headroom.
+  const MAX_JOBS = parseInt(process.env.RECONCILE_MAX_JOBS || '5000', 10);
 
   try {
     while (true) {
@@ -167,8 +173,8 @@ async function getCompletedJobsModifiedSince(token, modifiedOnOrAfter) {
       if (jobs.length < pageSize) break;
       page++;
 
-      if (allJobs.length >= 500) {
-        console.warn('[ST API] Hit 500 job limit during reconcile poll — increase frequency or lookback window');
+      if (allJobs.length >= MAX_JOBS) {
+        console.warn(`[ST API] Hit ${MAX_JOBS} job limit during reconcile poll — widen RECONCILE_MAX_JOBS or shorten the window`);
         break;
       }
     }
