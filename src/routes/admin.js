@@ -251,15 +251,11 @@ router.post('/api/referral/:id/payout', requireWriteAccess, async (req, res) => 
       })
       .eq('id', id);
 
-    // Update customer totals
+    // `total_referrals` and `total_rewards` are earned-reward totals.
+    // They are updated when a qualifying referral reaches `completed` in the
+    // poller, not when the existing reward is paid. Updating here would count
+    // the same referral and reward a second time.
     const referrer = referral.referrer;
-    await supabase
-      .from('customers')
-      .update({
-        total_referrals: (referrer.total_referrals || 0) + 1,
-        total_rewards:   (referrer.total_rewards || 0) + payoutAmount,
-      })
-      .eq('id', referrer.id);
 
     // Send reward notification text
     if (referrer.phone) {

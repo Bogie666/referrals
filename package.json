@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "seed": "node scripts/seed-demo.js",
-    "seed:clear": "node scripts/seed-demo.js --clear"
+    "seed:clear": "node scripts/seed-demo.js --clear",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
